@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Weekly Finance Tracker</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Finance tracker prototype</p>
+          <h1>Spend pace</h1>
+          <p class="lede">
+            Compare expenses by month, calendar week, or 15th-to-15th pay cycle.
+          </p>
+        </div>
+
+        <div class="control-panel" aria-label="Tracker controls">
+          <div id="authPanel" class="auth-panel">
+            <form id="authForm" class="auth-form">
+              <label>
+                Email
+                <input id="authEmailInput" type="email" autocomplete="email" placeholder="you@example.com" required />
+              </label>
+              <label>
+                Password
+                <input id="authPasswordInput" type="password" autocomplete="current-password" placeholder="Your Supabase password" />
+              </label>
+              <button id="authButton" type="submit">Sign in</button>
+              <button id="magicLinkButton" class="secondary-button" type="button">Send login link</button>
+            </form>
+            <div id="signedInPanel" class="signed-in-panel" hidden>
+              <span id="signedInEmail">Signed in</span>
+              <button id="signOutButton" class="secondary-button" type="button">Sign out</button>
+            </div>
+            <p id="authMessage" class="auth-message">Sign in to sync privately across devices.</p>
+          </div>
+          <div id="trackerControls" class="tracker-controls" hidden>
+          <label>
+            View by
+            <select id="periodModeSelect">
+              <option value="month">Calendar monthly</option>
+              <option value="week">Calendar week</option>
+              <option value="payCycle">Pay cycle</option>
+            </select>
+          </label>
+          <label>
+            Period
+            <select id="periodSelect"></select>
+          </label>
+          <label>
+            Date
+            <input id="entryDateInput" type="date" />
+          </label>
+          <label>
+            Amount
+            <input id="actualInput" type="text" inputmode="decimal" autocomplete="off" />
+          </label>
+          <label>
+            Bucket
+            <select id="categorySelect"></select>
+          </label>
+          <label>
+            Subcategory
+            <select id="subcategorySelect"></select>
+          </label>
+          <button id="saveButton" type="button">Add amount</button>
+          <button id="viewEntriesButton" class="secondary-button" type="button">See list of entries</button>
+          <button id="editPlanButton" class="secondary-button" type="button">Edit plan</button>
+          <p id="syncStatus" class="sync-status">Local backup ready</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="dashboardSummary" class="kpi-grid" aria-label="Weekly summary" hidden>
+        <article class="kpi-card primary">
+          <span id="targetTitle">Target</span>
+          <strong id="weeklyTarget">$0</strong>
+          <small id="targetBasis">Selected period plan</small>
+        </article>
+        <article class="kpi-card">
+          <span>Actual spend</span>
+          <strong id="actualSaved">$0</strong>
+          <small id="savedLabel">No entries yet</small>
+        </article>
+        <article class="kpi-card" id="varianceCard">
+          <span>Variance</span>
+          <strong id="varianceValue">$0</strong>
+          <small id="varianceCopy">Enter actual spend to compare</small>
+        </article>
+        <article class="kpi-card">
+          <span>Period income</span>
+          <strong id="monthlyPlan">$0</strong>
+          <small id="incomeLabel">Income planned for selected period</small>
+        </article>
+      </section>
+
+      <section id="dashboardWorkbench" class="workbench" hidden>
+        <div class="panel categories-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Budget shape</p>
+              <h2>Category targets</h2>
+            </div>
+            <span id="monthBadge" class="badge"></span>
+          </div>
+          <div id="categoryList" class="category-list"></div>
+        </div>
+
+        <div class="panel trend-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Monthly rhythm</p>
+              <h2>Expense plan trend</h2>
+            </div>
+          </div>
+          <div id="trendChart" class="trend-chart" aria-label="Monthly planned expense chart"></div>
+          <div class="mini-table">
+            <div>
+              <span>Income</span>
+              <strong id="incomeValue">$0</strong>
+            </div>
+            <div>
+              <span>Expenses</span>
+              <strong id="expensesValue">$0</strong>
+            </div>
+            <div>
+              <span>Savings</span>
+              <strong id="savingsValue">$0</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel investment-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Investment / savings bucket</p>
+              <h2>Investing pace</h2>
+            </div>
+            <span id="investmentBadge" class="badge"></span>
+          </div>
+
+          <div class="investment-stats" aria-label="Investment summary">
+            <div>
+              <span>Investing this month</span>
+              <strong id="monthlyInvestment">$0</strong>
+            </div>
+            <div>
+              <span>Accumulated budget</span>
+              <strong id="accumulatedInvestment">$0</strong>
+            </div>
+            <div>
+              <span>10% return estimate</span>
+              <strong id="compoundInvestment">$0</strong>
+            </div>
+          </div>
+
+          <div id="investmentRows" class="investment-rows"></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="entryModal" class="modal-layer" aria-hidden="true">
+      <div class="modal-backdrop" data-close-modal></div>
+      <section class="entry-modal" role="dialog" aria-modal="true" aria-labelledby="entryModalTitle">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">Period entries</p>
+            <h2 id="entryModalTitle">Spend list</h2>
+          </div>
+          <button id="closeEntriesButton" class="icon-button" type="button" aria-label="Close entries">&times;</button>
+        </div>
+        <div id="entryModalSummary" class="modal-summary"></div>
+        <div id="entryList" class="entry-list" aria-live="polite"></div>
+      </section>
+    </div>
+
+    <div id="planModal" class="modal-layer" aria-hidden="true">
+      <div class="modal-backdrop" data-close-plan-modal></div>
+      <section class="entry-modal plan-modal" role="dialog" aria-modal="true" aria-labelledby="planModalTitle">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">Planning overrides</p>
+            <h2 id="planModalTitle">Plan editor</h2>
+          </div>
+          <button id="closePlanButton" class="icon-button" type="button" aria-label="Close plan editor">&times;</button>
+        </div>
+        <div class="plan-controls">
+          <label>
+            Month
+            <select id="planMonthSelect"></select>
+          </label>
+          <label>
+            Bucket
+            <select id="planSectionSelect"></select>
+          </label>
+        </div>
+        <div id="planEditorList" class="plan-editor-list"></div>
+        <div class="edit-actions">
+          <button id="savePlanButton" type="button">Save plan changes</button>
+          <button id="resetPlanButton" class="secondary-button" type="button">Reset bucket</button>
+        </div>
+      </section>
+    </div>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

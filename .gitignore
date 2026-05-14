@@ -1,0 +1,6 @@
+.DS_Store
+*.numbers
+*.xlsx
+~$*.xlsx
+finance-data.json
+supabase-setup.sql
