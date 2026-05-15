@@ -103,8 +103,8 @@ async function init() {
 
 function setupTrackerListeners() {
   els.periodModeSelect.addEventListener("change", () => {
-    populatePeriodOptions();
-    render();
+    els.entryDateInput.value = getDefaultEntryDateKey();
+    populatePeriodOptions(els.entryDateInput.value);
   });
   els.periodSelect.addEventListener("change", syncDateToPeriod);
   els.entryDateInput.addEventListener("change", syncPeriodToDate);
@@ -279,8 +279,8 @@ async function initializeDashboard() {
 
   populateCategoryOptions();
   populatePlanOptions();
-  els.entryDateInput.value = `${financeData.months[0].key}-01`;
-  populatePeriodOptions();
+  els.entryDateInput.value = getDefaultEntryDateKey();
+  populatePeriodOptions(els.entryDateInput.value);
   dashboardReady = true;
   updateDashboardVisibility();
   render();
@@ -614,7 +614,7 @@ function resetPlanSection() {
   render();
 }
 
-function populatePeriodOptions() {
+function populatePeriodOptions(preferredDateValue = els.entryDateInput.value) {
   const mode = els.periodModeSelect.value;
   periods = buildPeriods(mode);
   els.periodSelect.replaceChildren();
@@ -624,12 +624,13 @@ function populatePeriodOptions() {
     option.textContent = period.label;
     els.periodSelect.append(option);
   });
-  syncPeriodToDate();
+  syncPeriodToDateValue(preferredDateValue);
 }
 
 function syncDateToPeriod() {
   const period = getSelectedPeriod();
-  els.entryDateInput.value = dateKey(period.start);
+  const today = startOfDay(new Date());
+  els.entryDateInput.value = today >= period.start && today < period.end ? dateKey(today) : dateKey(period.start);
   render();
 }
 
@@ -921,6 +922,17 @@ function hasPlanOverride(sectionName, rowName, monthKey) {
 
 function getSelectedPeriod() {
   return periods.find((period) => period.id === els.periodSelect.value) ?? periods[0];
+}
+
+function getDefaultEntryDateKey() {
+  const today = startOfDay(new Date());
+  const isInsidePlanYear = financeData.months.some((month) => {
+    const start = monthStart(month.key);
+    const end = addMonths(start, 1);
+    return today >= start && today < end;
+  });
+
+  return isInsidePlanYear ? dateKey(today) : `${financeData.months[0].key}-01`;
 }
 
 function getEntriesForPeriod(period) {
