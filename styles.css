@@ -654,7 +654,7 @@ body.modal-open {
 
 .investment-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 140px minmax(180px, 0.85fr);
+  grid-template-columns: minmax(180px, 1fr) 170px minmax(220px, 0.9fr);
   align-items: center;
   gap: 16px;
   padding: 14px;
@@ -663,8 +663,51 @@ body.modal-open {
   background: #ffffff;
 }
 
-.investment-fill {
+.investment-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.investment-money {
+  display: grid;
+  gap: 3px;
+  text-align: right;
+}
+
+.investment-money span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.investment-money strong {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.08rem;
+}
+
+.investment-progress {
+  position: relative;
+  overflow: hidden;
+  height: 12px;
+  border-radius: 999px;
+  background: #e8efff;
+}
+
+.investment-planned-line,
+.investment-actual-line {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.investment-planned-line {
   background: var(--blue);
+}
+
+.investment-actual-line {
+  background: var(--green);
 }
 
 .compound-row {

@@ -766,19 +766,25 @@ function renderInvestments(period, periodEntries) {
     );
     return { ...group, plannedValue, actualValue };
   });
-  const maxRowValue = Math.max(...groupedRows.map((row) => row.plannedValue), 1);
   els.investmentRows.replaceChildren();
 
   groupedRows.forEach((item) => {
     const row = document.createElement("div");
     row.className = "investment-row";
+    const progress = item.plannedValue > 0 ? Math.min((item.actualValue / item.plannedValue) * 100, 100) : item.actualValue > 0 ? 100 : 0;
     row.innerHTML = `
       <div>
         <div class="category-name">${item.label}</div>
-        <small>${money(item.actualValue)} actual in selected period</small>
+        <small>${money(item.actualValue)} actual of ${money(item.plannedValue)} planned</small>
       </div>
-      <div class="money">${money(item.plannedValue)}</div>
-      <div class="bar-track" aria-hidden="true"><div class="bar-fill investment-fill" style="width:${(item.plannedValue / maxRowValue) * 100}%"></div></div>
+      <div class="investment-money">
+        <span>Planned ${money(item.plannedValue)}</span>
+        <strong>${money(item.actualValue)}</strong>
+      </div>
+      <div class="investment-progress" aria-label="${item.label}: ${money(item.actualValue)} actual of ${money(item.plannedValue)} planned">
+        <div class="investment-planned-line"></div>
+        <div class="investment-actual-line" style="width:${progress}%"></div>
+      </div>
     `;
     els.investmentRows.append(row);
   });
