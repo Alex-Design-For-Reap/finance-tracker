@@ -43,10 +43,17 @@ const els = {
   subcategorySelect: document.querySelector("#subcategorySelect"),
   saveButton: document.querySelector("#saveButton"),
   viewEntriesButton: document.querySelector("#viewEntriesButton"),
+  bulkEntriesButton: document.querySelector("#bulkEntriesButton"),
   editPlanButton: document.querySelector("#editPlanButton"),
   closeEntriesButton: document.querySelector("#closeEntriesButton"),
+  closeBulkButton: document.querySelector("#closeBulkButton"),
   entryModal: document.querySelector("#entryModal"),
   entryModalSummary: document.querySelector("#entryModalSummary"),
+  bulkModal: document.querySelector("#bulkModal"),
+  bulkModalSummary: document.querySelector("#bulkModalSummary"),
+  bulkEntryRows: document.querySelector("#bulkEntryRows"),
+  addBulkRowButton: document.querySelector("#addBulkRowButton"),
+  saveBulkButton: document.querySelector("#saveBulkButton"),
   planModal: document.querySelector("#planModal"),
   closePlanButton: document.querySelector("#closePlanButton"),
   planMonthSelect: document.querySelector("#planMonthSelect"),
@@ -91,6 +98,7 @@ let entries = loadEntries();
 let planOverrides = loadPlanOverrides();
 let currentUser = null;
 let dashboardReady = false;
+let deletedBulkEntryIds = new Set();
 
 init();
 
@@ -112,9 +120,13 @@ function setupTrackerListeners() {
   els.actualInput.addEventListener("input", updateLiveVariance);
   els.saveButton.addEventListener("click", saveEntry);
   els.viewEntriesButton.addEventListener("click", openEntryModal);
+  els.bulkEntriesButton.addEventListener("click", openBulkModal);
   els.editPlanButton.addEventListener("click", openPlanModal);
   els.closeEntriesButton.addEventListener("click", closeEntryModal);
+  els.closeBulkButton.addEventListener("click", closeBulkModal);
   els.closePlanButton.addEventListener("click", closePlanModal);
+  els.addBulkRowButton.addEventListener("click", () => addBulkRow());
+  els.saveBulkButton.addEventListener("click", saveBulkEntries);
   els.planMonthSelect.addEventListener("change", renderPlanEditor);
   els.planSectionSelect.addEventListener("change", renderPlanEditor);
   els.savePlanButton.addEventListener("click", savePlanEditor);
@@ -125,9 +137,13 @@ function setupTrackerListeners() {
   els.planModal.addEventListener("click", (event) => {
     if (event.target.matches("[data-close-plan-modal]")) closePlanModal();
   });
+  els.bulkModal.addEventListener("click", (event) => {
+    if (event.target.matches("[data-close-bulk-modal]")) closeBulkModal();
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeEntryModal();
+      closeBulkModal();
       closePlanModal();
     }
   });
@@ -183,6 +199,7 @@ function setupAuthListeners() {
       periods = [];
       updateDashboardVisibility();
       closeEntryModal();
+      closeBulkModal();
       closePlanModal();
     }
   });
@@ -473,6 +490,116 @@ function removeEntry(id) {
   saveEntries();
   deleteSupabaseEntry(id);
   render();
+}
+
+function openBulkModal() {
+  renderBulkEntries();
+  els.bulkModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  els.closeBulkButton.focus();
+}
+
+function closeBulkModal() {
+  els.bulkModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function renderBulkEntries() {
+  const period = getSelectedPeriod();
+  const periodEntries = getEntriesForPeriod(period)
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+  deletedBulkEntryIds = new Set();
+
+  els.bulkEntryRows.replaceChildren();
+  els.bulkModalSummary.textContent = `${period.label} · edit existing entries or add several new rows`;
+
+  const header = document.createElement("div");
+  header.className = "bulk-entry-header";
+  header.innerHTML = `
+    <span>Date</span>
+    <span>Amount</span>
+    <span>Bucket</span>
+    <span>Subcategory</span>
+    <span></span>
+  `;
+  els.bulkEntryRows.append(header);
+
+  periodEntries.forEach((entry) => addBulkRow(entry));
+  const blankCount = Math.max(5 - periodEntries.length, 3);
+  Array.from({ length: blankCount }).forEach(() => addBulkRow());
+}
+
+function addBulkRow(entry = null) {
+  const row = document.createElement("div");
+  row.className = "bulk-entry-row";
+  if (entry?.id) row.dataset.entryId = entry.id;
+  row.innerHTML = `
+    <input class="bulk-date" type="date" value="${entry?.date || els.entryDateInput.value}" />
+    <input class="bulk-amount" type="text" inputmode="decimal" value="${entry?.amount ?? ""}" placeholder="0.00" />
+    <select class="bulk-category"></select>
+    <select class="bulk-subcategory"></select>
+    <button class="secondary-button bulk-remove-button" type="button">Remove</button>
+  `;
+
+  const categorySelect = row.querySelector(".bulk-category");
+  const subcategorySelect = row.querySelector(".bulk-subcategory");
+  populateCategorySelect(categorySelect, entry?.category || els.categorySelect.value);
+  populateSubcategorySelect(subcategorySelect, categorySelect.value, entry?.subcategory || els.subcategorySelect.value);
+  categorySelect.addEventListener("change", () => populateSubcategorySelect(subcategorySelect, categorySelect.value));
+  row.querySelector(".bulk-remove-button").addEventListener("click", () => {
+    if (row.dataset.entryId) deletedBulkEntryIds.add(row.dataset.entryId);
+    row.remove();
+  });
+
+  els.bulkEntryRows.append(row);
+}
+
+function saveBulkEntries() {
+  const now = new Date().toISOString();
+  const rows = [...els.bulkEntryRows.querySelectorAll(".bulk-entry-row")];
+  const nextEntriesById = new Map(entries.map((entry) => [entry.id, entry]));
+
+  deletedBulkEntryIds.forEach((id) => nextEntriesById.delete(id));
+
+  rows.forEach((row) => {
+    const amount = parseAmount(row.querySelector(".bulk-amount").value);
+    const date = row.querySelector(".bulk-date").value;
+    const category = row.querySelector(".bulk-category").value;
+    const subcategory = row.querySelector(".bulk-subcategory").value;
+    const id = row.dataset.entryId;
+
+    if (!date || !Number.isFinite(amount) || amount <= 0) return;
+
+    if (id && nextEntriesById.has(id)) {
+      nextEntriesById.set(id, {
+        ...nextEntriesById.get(id),
+        amount,
+        date,
+        category,
+        subcategory,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    const newId = crypto.randomUUID();
+    nextEntriesById.set(newId, {
+      id: newId,
+      amount,
+      date,
+      category,
+      subcategory,
+      createdAt: now,
+    });
+  });
+
+  entries = [...nextEntriesById.values()];
+  saveEntries();
+  deletedBulkEntryIds.forEach((id) => deleteSupabaseEntry(id));
+  deletedBulkEntryIds = new Set();
+  syncPeriodToDate();
+  renderBulkEntries();
 }
 
 function openEntryModal() {

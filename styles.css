@@ -265,6 +265,67 @@ body.modal-open {
   gap: 12px;
 }
 
+.bulk-modal {
+  width: min(1080px, 100%);
+  max-height: min(86vh, 780px);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.bulk-table-wrap {
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.bulk-entry-rows {
+  display: grid;
+  gap: 8px;
+  min-width: 820px;
+}
+
+.bulk-entry-header,
+.bulk-entry-row {
+  display: grid;
+  grid-template-columns: 150px 130px minmax(190px, 1fr) minmax(220px, 1.1fr) 92px;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulk-entry-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0 8px 2px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.bulk-entry-row {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.bulk-entry-row input,
+.bulk-entry-row select {
+  min-height: 38px;
+  padding: 0 9px;
+  font-size: 0.82rem;
+}
+
+.bulk-remove-button {
+  min-height: 38px;
+  padding: 0 8px;
+  font-size: 0.74rem;
+}
+
+.bulk-actions {
+  grid-template-columns: minmax(160px, 0.35fr) minmax(220px, 1fr);
+}
+
 .plan-controls {
   display: grid;
   grid-template-columns: 1fr 1fr;
