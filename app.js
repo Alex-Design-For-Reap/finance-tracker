@@ -103,6 +103,7 @@ let planOverrides = loadPlanOverrides();
 let currentUser = null;
 let dashboardReady = false;
 let deletedBulkEntryIds = new Set();
+let entryModalContext = null;
 
 init();
 
@@ -344,7 +345,11 @@ function render() {
     ? `${incomeEntries.length} ${incomeEntries.length === 1 ? "income entry" : "income entries"} in this period`
     : "Income planned for selected period";
 
-  renderEntryList(periodEntries);
+  if (els.entryModal.getAttribute("aria-hidden") === "false" && entryModalContext) {
+    renderEntryList(entryModalContext);
+  } else {
+    renderEntryList(createPeriodEntryContext(periodEntries));
+  }
   renderCategories(period, target);
   renderEntryReport(period, periodEntries);
   renderTrend(period);
@@ -392,10 +397,12 @@ function updateLiveVariance() {
     : "Enter actual spend to compare";
 }
 
-function renderEntryList(periodEntries, options = {}) {
-  const period = getSelectedPeriod();
+function renderEntryList(context = entryModalContext || createPeriodEntryContext()) {
+  entryModalContext = context;
+  const periodEntries = context.getEntries();
+  els.entryModalTitle.textContent = context.title;
   els.entryList.replaceChildren();
-  els.entryModalSummary.textContent = options.summary || `${period.label} · ${money(sumEntries(periodEntries))} total entries`;
+  renderEntryModalSummary(context, periodEntries);
 
   if (!periodEntries.length) {
     const empty = document.createElement("p");
@@ -420,26 +427,78 @@ function renderEntryList(periodEntries, options = {}) {
         <button type="button" aria-label="Edit entry ${index + 1}">Edit</button>
         <button type="button" aria-label="Remove entry ${index + 1}">Remove</button>
       `;
-      row.querySelector(`[aria-label="Edit entry ${index + 1}"]`).addEventListener("click", () => renderEditEntry(entry));
+      row.querySelector(`[aria-label="Edit entry ${index + 1}"]`).addEventListener("click", () => renderEditEntry(entry, context));
       row.querySelector(`[aria-label="Remove entry ${index + 1}"]`).addEventListener("click", () => removeEntry(entry.id));
       els.entryList.append(row);
     });
 }
 
-function renderEditEntry(entry) {
+function createPeriodEntryContext(periodEntries = null) {
+  return {
+    title: "Spend list",
+    getEntries: () => periodEntries || getEntriesForPeriod(getSelectedPeriod()),
+    getSummary: (items) => `${getSelectedPeriod().label} · ${money(sumEntries(items))} total entries`,
+    getDefaults: () => ({
+      date: els.entryDateInput.value,
+      category: els.categorySelect.value,
+      subcategory: els.subcategorySelect.value,
+    }),
+  };
+}
+
+function createReportEntryContext({ title, category, subcategory = "" }) {
+  return {
+    title,
+    getEntries: () =>
+      getEntriesForPeriod(getSelectedPeriod()).filter((entry) => {
+        const categoryMatches = (entry.category || "Unclassified") === category;
+        const subcategoryMatches = !subcategory || (entry.subcategory || "No subcategory") === subcategory;
+        return categoryMatches && subcategoryMatches;
+      }),
+    getSummary: (items) => {
+      const total = items.reduce((sum, entry) => sum + getReportSignedAmount(entry), 0);
+      return `${category} · ${money(Math.abs(total))} total · ${items.length} ${items.length === 1 ? "entry" : "entries"}`;
+    },
+    getDefaults: () => ({
+      date: els.entryDateInput.value,
+      category,
+      subcategory: subcategory || getFirstSubcategory(category),
+    }),
+  };
+}
+
+function renderEntryModalSummary(context, periodEntries) {
+  els.entryModalSummary.replaceChildren();
+
+  const copy = document.createElement("span");
+  copy.textContent = context.getSummary(periodEntries);
+
+  const addButton = document.createElement("button");
+  addButton.className = "secondary-button modal-add-button";
+  addButton.type = "button";
+  addButton.textContent = "Add row";
+  addButton.addEventListener("click", () => renderEditEntry(null, context));
+
+  els.entryModalSummary.append(copy, addButton);
+}
+
+function renderEditEntry(entry, context = entryModalContext || createPeriodEntryContext()) {
+  entryModalContext = context;
   els.entryList.replaceChildren();
-  els.entryModalSummary.textContent = "Edit entry";
+  els.entryModalSummary.replaceChildren();
+  els.entryModalSummary.textContent = entry ? "Edit entry" : "Add entry";
 
   const form = document.createElement("form");
   form.className = "edit-entry-form";
+  const defaults = context.getDefaults();
   form.innerHTML = `
     <label>
       Date
-      <input name="date" type="date" value="${entry.date}" required />
+      <input name="date" type="date" value="${entry?.date || defaults.date}" required />
     </label>
     <label>
       Amount
-      <input name="amount" type="text" inputmode="decimal" value="${entry.amount}" required />
+      <input name="amount" type="text" inputmode="decimal" value="${entry?.amount ?? ""}" required />
     </label>
     <label>
       Bucket
@@ -457,32 +516,43 @@ function renderEditEntry(entry) {
 
   const categorySelect = form.elements.category;
   const subcategorySelect = form.elements.subcategory;
-  populateCategorySelect(categorySelect, entry.category);
-  populateSubcategorySelect(subcategorySelect, categorySelect.value, entry.subcategory);
+  populateCategorySelect(categorySelect, entry?.category || defaults.category);
+  populateSubcategorySelect(subcategorySelect, categorySelect.value, entry?.subcategory || defaults.subcategory);
 
   categorySelect.addEventListener("change", () => {
     populateSubcategorySelect(subcategorySelect, categorySelect.value);
   });
   form.querySelector("[data-cancel-edit]").addEventListener("click", () => {
-    renderEntryList(getEntriesForPeriod(getSelectedPeriod()));
+    renderEntryList(context);
   });
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     const amount = parseAmount(form.elements.amount.value);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
-    entries = entries.map((item) =>
-      item.id === entry.id
-        ? {
-            ...item,
-            date: form.elements.date.value,
-            amount,
-            category: categorySelect.value,
-            subcategory: subcategorySelect.value,
-            updatedAt: new Date().toISOString(),
-          }
-        : item,
-    );
+    if (entry) {
+      entries = entries.map((item) =>
+        item.id === entry.id
+          ? {
+              ...item,
+              date: form.elements.date.value,
+              amount,
+              category: categorySelect.value,
+              subcategory: subcategorySelect.value,
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      );
+    } else {
+      entries.push({
+        id: crypto.randomUUID(),
+        amount,
+        date: form.elements.date.value,
+        category: categorySelect.value,
+        subcategory: subcategorySelect.value,
+        createdAt: new Date().toISOString(),
+      });
+    }
     saveEntries();
     syncPeriodToDateValue(form.elements.date.value);
   });
@@ -608,8 +678,7 @@ function saveBulkEntries() {
 }
 
 function openEntryModal() {
-  els.entryModalTitle.textContent = "Spend list";
-  renderEntryList(getEntriesForPeriod(getSelectedPeriod()));
+  renderEntryList(createPeriodEntryContext());
   els.entryModal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
   els.closeEntriesButton.focus();
@@ -618,6 +687,7 @@ function openEntryModal() {
 function closeEntryModal() {
   els.entryModal.setAttribute("aria-hidden", "true");
   document.body.classList.remove("modal-open");
+  entryModalContext = null;
 }
 
 function openPlanModal() {
@@ -916,6 +986,7 @@ function renderEntryReport(period, periodEntries) {
             maxValue,
             entries: item.entries,
             category: item.category,
+            subcategory: item.subcategory,
             title: item.subcategory,
           }),
         );
@@ -923,7 +994,7 @@ function renderEntryReport(period, periodEntries) {
   });
 }
 
-function createReportRow({ className = "", label, detail, total, maxValue, entries: rowEntries, category, title }) {
+function createReportRow({ className = "", label, detail, total, maxValue, category, subcategory = "", title }) {
   const row = document.createElement("button");
   row.className = `report-row ${className} ${total < 0 ? "is-negative" : "is-positive"}`;
   row.type = "button";
@@ -942,18 +1013,14 @@ function createReportRow({ className = "", label, detail, total, maxValue, entri
     openReportEntries({
       title,
       category,
-      entries: rowEntries,
-      total,
+      subcategory,
     }),
   );
   return row;
 }
 
 function openReportEntries(group) {
-  els.entryModalTitle.textContent = group.title;
-  renderEntryList(group.entries, {
-    summary: `${group.category} · ${money(Math.abs(group.total))} total · ${group.entries.length} ${group.entries.length === 1 ? "entry" : "entries"}`,
-  });
+  renderEntryList(createReportEntryContext(group));
   els.entryModal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
   els.closeEntriesButton.focus();
@@ -1213,6 +1280,10 @@ function getExpenseSections() {
 
 function getSection(name) {
   return financeData.sections.find((section) => section.name === name);
+}
+
+function getFirstSubcategory(category) {
+  return getSection(category)?.rows[0]?.name || "";
 }
 
 function isExpenseCategory(category) {
