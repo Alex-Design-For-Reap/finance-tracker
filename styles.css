@@ -252,6 +252,10 @@ body.modal-open {
   text-align: right;
 }
 
+.entry-row strong.entry-credit {
+  color: var(--green);
+}
+
 .entry-row button {
   min-height: 28px;
   padding: 0 8px;
@@ -279,13 +283,13 @@ body.modal-open {
 .bulk-entry-rows {
   display: grid;
   gap: 8px;
-  min-width: 820px;
+  min-width: 960px;
 }
 
 .bulk-entry-header,
 .bulk-entry-row {
   display: grid;
-  grid-template-columns: 150px 130px minmax(190px, 1fr) minmax(220px, 1.1fr) 92px;
+  grid-template-columns: 140px 120px minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(220px, 1.1fr) 92px;
   align-items: center;
   gap: 8px;
 }

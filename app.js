@@ -3,6 +3,11 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const EXPENSE_SECTIONS = ["Daily Expenses", "Financial Obligations", "Splurge", "Smile"];
 const INCOME_SECTION = "Income";
 const INVESTMENT_SECTION = "Investments / Savings";
+const ENTRY_TYPES = {
+  expense: "Expense",
+  credit: "Refund/Credit",
+  reserve: "Reserve used",
+};
 const ANNUAL_RETURN_RATE = 0.1;
 const PAY_CYCLE_START_DAY = 14;
 const SUPABASE_URL = "https://cqbtorlmiqdpcoxqnrjy.supabase.co";
@@ -40,6 +45,7 @@ const els = {
   periodSelect: document.querySelector("#periodSelect"),
   entryDateInput: document.querySelector("#entryDateInput"),
   actualInput: document.querySelector("#actualInput"),
+  entryTypeSelect: document.querySelector("#entryTypeSelect"),
   categorySelect: document.querySelector("#categorySelect"),
   subcategorySelect: document.querySelector("#subcategorySelect"),
   saveButton: document.querySelector("#saveButton"),
@@ -121,7 +127,11 @@ function setupTrackerListeners() {
   });
   els.periodSelect.addEventListener("change", syncDateToPeriod);
   els.entryDateInput.addEventListener("change", syncPeriodToDate);
-  els.categorySelect.addEventListener("change", populateSubcategoryOptions);
+  els.entryTypeSelect.addEventListener("change", updateLiveVariance);
+  els.categorySelect.addEventListener("change", () => {
+    populateSubcategoryOptions();
+    updateLiveVariance();
+  });
   els.actualInput.addEventListener("input", updateLiveVariance);
   els.saveButton.addEventListener("click", saveEntry);
   els.viewEntriesButton.addEventListener("click", openEntryModal);
@@ -322,7 +332,7 @@ function render() {
   const periodEntries = getEntriesForPeriod(period);
   const expenseEntries = periodEntries.filter((entry) => isExpenseCategory(entry.category));
   const incomeEntries = periodEntries.filter((entry) => entry.category === INCOME_SECTION);
-  const actualTotal = sumEntries(expenseEntries);
+  const actualTotal = sumEntryImpacts(expenseEntries);
   const target = getBudgetForRange(period.start, period.end, getExpenseSections());
   const incomeTarget = getBudgetForRange(period.start, period.end, [getSection(INCOME_SECTION)]);
   const actualIncome = sumEntries(incomeEntries);
@@ -368,6 +378,7 @@ function saveEntry() {
   entries.push({
     id: crypto.randomUUID(),
     amount: value,
+    type: els.entryTypeSelect.value,
     date: els.entryDateInput.value,
     category: els.categorySelect.value,
     subcategory: els.subcategorySelect.value,
@@ -381,8 +392,10 @@ function updateLiveVariance() {
   if (!periods.length) return;
   const period = getSelectedPeriod();
   const periodEntries = getEntriesForPeriod(period).filter((entry) => isExpenseCategory(entry.category));
-  const currentInput = isExpenseCategory(els.categorySelect.value) ? parseAmount(els.actualInput.value) : 0;
-  const actual = sumEntries(periodEntries) + (Number.isFinite(currentInput) ? currentInput : 0);
+  const currentInput = isExpenseCategory(els.categorySelect.value)
+    ? getEntryImpact({ amount: parseAmount(els.actualInput.value), type: els.entryTypeSelect.value, category: els.categorySelect.value })
+    : 0;
+  const actual = sumEntryImpacts(periodEntries) + (Number.isFinite(currentInput) ? currentInput : 0);
   const target = getBudgetForRange(period.start, period.end, getExpenseSections());
   const variance = target - actual;
   const hasActual = actual > 0;
@@ -421,9 +434,9 @@ function renderEntryList(context = entryModalContext || createPeriodEntryContext
       row.innerHTML = `
         <span>
           <b>${formatDisplayDate(entry.date)}</b>
-          <small>${entry.category || "Unclassified"} · ${entry.subcategory || "No subcategory"}</small>
+          <small>${entry.category || "Unclassified"} · ${entry.subcategory || "No subcategory"} · ${getEntryTypeLabel(entry)}</small>
         </span>
-        <strong>${money(entry.amount)}</strong>
+        <strong class="${getEntryImpact(entry) < 0 ? "entry-credit" : ""}">${formatEntryAmount(entry)}</strong>
         <button type="button" aria-label="Edit entry ${index + 1}">Edit</button>
         <button type="button" aria-label="Remove entry ${index + 1}">Remove</button>
       `;
@@ -440,6 +453,7 @@ function createPeriodEntryContext(periodEntries = null) {
     getSummary: (items) => `${getSelectedPeriod().label} · ${money(sumEntries(items))} total entries`,
     getDefaults: () => ({
       date: els.entryDateInput.value,
+      type: els.entryTypeSelect.value,
       category: els.categorySelect.value,
       subcategory: els.subcategorySelect.value,
     }),
@@ -461,6 +475,7 @@ function createReportEntryContext({ title, category, subcategory = "" }) {
     },
     getDefaults: () => ({
       date: els.entryDateInput.value,
+      type: "expense",
       category,
       subcategory: subcategory || getFirstSubcategory(category),
     }),
@@ -501,6 +516,10 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
       <input name="amount" type="text" inputmode="decimal" value="${entry?.amount ?? ""}" required />
     </label>
     <label>
+      Type
+      <select name="type"></select>
+    </label>
+    <label>
       Bucket
       <select name="category"></select>
     </label>
@@ -514,8 +533,10 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
     </div>
   `;
 
+  const typeSelect = form.elements.type;
   const categorySelect = form.elements.category;
   const subcategorySelect = form.elements.subcategory;
+  populateEntryTypeSelect(typeSelect, getEntryType(entry) || defaults.type);
   populateCategorySelect(categorySelect, entry?.category || defaults.category);
   populateSubcategorySelect(subcategorySelect, categorySelect.value, entry?.subcategory || defaults.subcategory);
 
@@ -537,6 +558,7 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
               ...item,
               date: form.elements.date.value,
               amount,
+              type: typeSelect.value,
               category: categorySelect.value,
               subcategory: subcategorySelect.value,
               updatedAt: new Date().toISOString(),
@@ -547,6 +569,7 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
       entries.push({
         id: crypto.randomUUID(),
         amount,
+        type: typeSelect.value,
         date: form.elements.date.value,
         category: categorySelect.value,
         subcategory: subcategorySelect.value,
@@ -594,6 +617,7 @@ function renderBulkEntries() {
   header.innerHTML = `
     <span>Date</span>
     <span>Amount</span>
+    <span>Type</span>
     <span>Bucket</span>
     <span>Subcategory</span>
     <span></span>
@@ -612,13 +636,16 @@ function addBulkRow(entry = null) {
   row.innerHTML = `
     <input class="bulk-date" type="date" value="${entry?.date || els.entryDateInput.value}" />
     <input class="bulk-amount" type="text" inputmode="decimal" value="${entry?.amount ?? ""}" placeholder="0.00" />
+    <select class="bulk-type"></select>
     <select class="bulk-category"></select>
     <select class="bulk-subcategory"></select>
     <button class="secondary-button bulk-remove-button" type="button">Remove</button>
   `;
 
+  const typeSelect = row.querySelector(".bulk-type");
   const categorySelect = row.querySelector(".bulk-category");
   const subcategorySelect = row.querySelector(".bulk-subcategory");
+  populateEntryTypeSelect(typeSelect, getEntryType(entry) || els.entryTypeSelect.value);
   populateCategorySelect(categorySelect, entry?.category || els.categorySelect.value);
   populateSubcategorySelect(subcategorySelect, categorySelect.value, entry?.subcategory || els.subcategorySelect.value);
   categorySelect.addEventListener("change", () => populateSubcategorySelect(subcategorySelect, categorySelect.value));
@@ -640,6 +667,7 @@ function saveBulkEntries() {
   rows.forEach((row) => {
     const amount = parseAmount(row.querySelector(".bulk-amount").value);
     const date = row.querySelector(".bulk-date").value;
+    const type = row.querySelector(".bulk-type").value;
     const category = row.querySelector(".bulk-category").value;
     const subcategory = row.querySelector(".bulk-subcategory").value;
     const id = row.dataset.entryId;
@@ -651,6 +679,7 @@ function saveBulkEntries() {
         ...nextEntriesById.get(id),
         amount,
         date,
+        type,
         category,
         subcategory,
         updatedAt: now,
@@ -663,6 +692,7 @@ function saveBulkEntries() {
       id: newId,
       amount,
       date,
+      type,
       category,
       subcategory,
       createdAt: now,
@@ -707,8 +737,20 @@ function closePlanModal() {
 
 function populateCategoryOptions() {
   els.categorySelect.replaceChildren();
+  populateEntryTypeSelect(els.entryTypeSelect);
   populateCategorySelect(els.categorySelect);
   populateSubcategoryOptions();
+}
+
+function populateEntryTypeSelect(select, selectedValue = "expense") {
+  select.replaceChildren();
+  Object.entries(ENTRY_TYPES).forEach(([value, label]) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    if (value === selectedValue) option.selected = true;
+    select.append(option);
+  });
 }
 
 function populateSubcategoryOptions() {
@@ -862,7 +904,7 @@ function renderCategories(period, totalTarget) {
 
   getExpenseSections().forEach((section) => {
     const target = getBudgetForRange(period.start, period.end, [section]);
-    const actual = sumEntries(
+    const actual = sumEntryImpacts(
       periodEntries.filter((entry) => entry.category === section.name),
     );
     const share = incomeTarget > 0 ? Math.round((target / incomeTarget) * 100) : 0;
@@ -1028,7 +1070,7 @@ function openReportEntries(group) {
 
 function getReportSignedAmount(entry) {
   const amount = Number(entry.amount || 0);
-  return isExpenseCategory(entry.category) ? -amount : amount;
+  return isExpenseCategory(entry.category) ? -getEntryImpact(entry) : amount;
 }
 
 function formatReportMoney(value) {
@@ -1304,7 +1346,7 @@ function getPaceInfo({ actual, target, period, kind }) {
   const tolerance = Math.max(target * 0.05, 50);
   const delta = actual - expected;
   const isComplete = today >= period.end;
-  const progress = expected > 0 ? Math.min((actual / expected) * 100, 100) : actual > 0 ? 100 : 0;
+  const progress = expected > 0 ? Math.min(Math.max((actual / expected) * 100, 0), 100) : actual > 0 ? 100 : 0;
 
   if (Math.abs(delta) <= tolerance) {
     return { expected, progress, label: isComplete ? "Complete" : "On track", className: "pace-good" };
@@ -1454,6 +1496,7 @@ function toSupabaseEntry(entry) {
     id: toSupabaseKey(entry.id),
     user_id: currentUser.id,
     amount: Number(entry.amount || 0),
+    entry_type: getEntryType(entry),
     entry_date: entry.date,
     category: entry.category,
     subcategory: entry.subcategory || null,
@@ -1467,6 +1510,7 @@ function fromSupabaseEntry(row) {
   return {
     id: fromSupabaseKey(row.id),
     amount: Number(row.amount || 0),
+    type: row.entry_type || "expense",
     date: row.entry_date,
     category: row.category,
     subcategory: row.subcategory || "",
@@ -1628,6 +1672,29 @@ function escapeAttribute(value) {
 
 function sumEntries(items) {
   return items.reduce((sum, entry) => sum + Number(entry.amount || 0), 0);
+}
+
+function sumEntryImpacts(items) {
+  return items.reduce((sum, entry) => sum + getEntryImpact(entry), 0);
+}
+
+function getEntryImpact(entry) {
+  const amount = Number(entry?.amount || 0);
+  if (!isExpenseCategory(entry?.category)) return amount;
+  return getEntryType(entry) === "expense" ? amount : -amount;
+}
+
+function getEntryType(entry) {
+  return entry?.type && Object.prototype.hasOwnProperty.call(ENTRY_TYPES, entry.type) ? entry.type : "expense";
+}
+
+function getEntryTypeLabel(entry) {
+  return ENTRY_TYPES[getEntryType(entry)];
+}
+
+function formatEntryAmount(entry) {
+  const amount = Number(entry.amount || 0);
+  return getEntryImpact(entry) < 0 ? `+${money(amount)}` : money(amount);
 }
 
 function money(value) {

@@ -1,6 +1,16 @@
 alter table public.finance_entries
   add column if not exists user_id uuid references auth.users(id) on delete cascade;
 
+alter table public.finance_entries
+  add column if not exists entry_type text not null default 'expense';
+
+alter table public.finance_entries
+  drop constraint if exists finance_entries_entry_type_check;
+
+alter table public.finance_entries
+  add constraint finance_entries_entry_type_check
+  check (entry_type in ('expense', 'credit', 'reserve'));
+
 alter table public.finance_plan_overrides
   add column if not exists user_id uuid references auth.users(id) on delete cascade;
 

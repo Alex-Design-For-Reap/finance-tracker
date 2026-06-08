@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Weekly Finance Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=20260608-modal-add" />
+    <link rel="stylesheet" href="styles.css?v=20260608-entry-type" />
   </head>
   <body>
     <main class="app-shell">
@@ -57,6 +57,14 @@
           <label>
             Amount
             <input id="actualInput" type="text" inputmode="decimal" autocomplete="off" />
+          </label>
+          <label>
+            Type
+            <select id="entryTypeSelect">
+              <option value="expense">Expense</option>
+              <option value="credit">Refund/Credit</option>
+              <option value="reserve">Reserve used</option>
+            </select>
           </label>
           <label>
             Bucket
@@ -238,6 +246,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=20260608-modal-add" type="module"></script>
+    <script src="app.js?v=20260608-entry-type" type="module"></script>
   </body>
 </html>
