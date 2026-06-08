@@ -49,6 +49,7 @@ const els = {
   closeEntriesButton: document.querySelector("#closeEntriesButton"),
   closeBulkButton: document.querySelector("#closeBulkButton"),
   entryModal: document.querySelector("#entryModal"),
+  entryModalTitle: document.querySelector("#entryModalTitle"),
   entryModalSummary: document.querySelector("#entryModalSummary"),
   bulkModal: document.querySelector("#bulkModal"),
   bulkModalSummary: document.querySelector("#bulkModalSummary"),
@@ -74,6 +75,8 @@ const els = {
   incomeLabel: document.querySelector("#incomeLabel"),
   categoryList: document.querySelector("#categoryList"),
   monthBadge: document.querySelector("#monthBadge"),
+  entryReportBadge: document.querySelector("#entryReportBadge"),
+  entryReportList: document.querySelector("#entryReportList"),
   trendChart: document.querySelector("#trendChart"),
   incomeValue: document.querySelector("#incomeValue"),
   expensesValue: document.querySelector("#expensesValue"),
@@ -343,6 +346,7 @@ function render() {
 
   renderEntryList(periodEntries);
   renderCategories(period, target);
+  renderEntryReport(period, periodEntries);
   renderTrend(period);
   renderMiniTable(period);
   renderInvestments(period, periodEntries);
@@ -388,10 +392,10 @@ function updateLiveVariance() {
     : "Enter actual spend to compare";
 }
 
-function renderEntryList(periodEntries) {
+function renderEntryList(periodEntries, options = {}) {
   const period = getSelectedPeriod();
   els.entryList.replaceChildren();
-  els.entryModalSummary.textContent = `${period.label} · ${money(sumEntries(periodEntries))} total entries`;
+  els.entryModalSummary.textContent = options.summary || `${period.label} · ${money(sumEntries(periodEntries))} total entries`;
 
   if (!periodEntries.length) {
     const empty = document.createElement("p");
@@ -604,6 +608,7 @@ function saveBulkEntries() {
 }
 
 function openEntryModal() {
+  els.entryModalTitle.textContent = "Spend list";
   renderEntryList(getEntriesForPeriod(getSelectedPeriod()));
   els.entryModal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
@@ -836,6 +841,138 @@ function renderCategories(period, totalTarget) {
     </div>
   `;
   els.categoryList.append(savingsRow);
+}
+
+function renderEntryReport(period, periodEntries) {
+  els.entryReportBadge.textContent = period.shortLabel;
+  els.entryReportList.replaceChildren();
+
+  if (!periodEntries.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-entries";
+    empty.textContent = "No entries in this period yet.";
+    els.entryReportList.append(empty);
+    return;
+  }
+
+  const groupedEntries = new Map();
+  periodEntries.forEach((entry) => {
+    const key = `${entry.category || "Unclassified"}::${entry.subcategory || "No subcategory"}`;
+    const current = groupedEntries.get(key) || {
+      category: entry.category || "Unclassified",
+      subcategory: entry.subcategory || "No subcategory",
+      entries: [],
+      total: 0,
+    };
+    current.entries.push(entry);
+    current.total += getReportSignedAmount(entry);
+    groupedEntries.set(key, current);
+  });
+
+  const reportRows = [...groupedEntries.values()];
+  const categoryGroups = new Map();
+  reportRows.forEach((row) => {
+    const group = categoryGroups.get(row.category) || {
+      category: row.category,
+      entries: [],
+      rows: [],
+      total: 0,
+    };
+    group.entries.push(...row.entries);
+    group.rows.push(row);
+    group.total += row.total;
+    categoryGroups.set(row.category, group);
+  });
+
+  const allRows = [
+    ...reportRows,
+    ...categoryGroups.values().map((group) => ({ total: group.total })),
+  ];
+  const maxValue = Math.max(...allRows.map((row) => Math.abs(row.total)), 1);
+  const sortedGroups = [...categoryGroups.values()].sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
+
+  sortedGroups.forEach((group) => {
+    els.entryReportList.append(
+      createReportRow({
+        className: "report-group-row",
+        label: group.category,
+        detail: `${group.rows.length} ${group.rows.length === 1 ? "subcategory" : "subcategories"} · ${group.entries.length} ${group.entries.length === 1 ? "entry" : "entries"}`,
+        total: group.total,
+        maxValue,
+        entries: group.entries,
+        category: group.category,
+        title: group.category,
+      }),
+    );
+
+    group.rows
+      .sort((a, b) => Math.abs(b.total) - Math.abs(a.total))
+      .forEach((item) => {
+        els.entryReportList.append(
+          createReportRow({
+            label: item.subcategory,
+            detail: `${item.category} · ${item.entries.length} ${item.entries.length === 1 ? "entry" : "entries"}`,
+            total: item.total,
+            maxValue,
+            entries: item.entries,
+            category: item.category,
+            title: item.subcategory,
+          }),
+        );
+      });
+  });
+}
+
+function createReportRow({ className = "", label, detail, total, maxValue, entries: rowEntries, category, title }) {
+  const row = document.createElement("button");
+  row.className = `report-row ${className} ${total < 0 ? "is-negative" : "is-positive"}`;
+  row.type = "button";
+  row.innerHTML = `
+    <span class="report-icon">${getReportInitials(label)}</span>
+    <span class="report-copy">
+      <b>${label}</b>
+      <small>${detail}</small>
+    </span>
+    <span class="report-money">${formatReportMoney(total)}</span>
+    <span class="report-bar" aria-hidden="true">
+      <span style="width:${(Math.abs(total) / maxValue) * 100}%"></span>
+    </span>
+  `;
+  row.addEventListener("click", () =>
+    openReportEntries({
+      title,
+      category,
+      entries: rowEntries,
+      total,
+    }),
+  );
+  return row;
+}
+
+function openReportEntries(group) {
+  els.entryModalTitle.textContent = group.title;
+  renderEntryList(group.entries, {
+    summary: `${group.category} · ${money(Math.abs(group.total))} total · ${group.entries.length} ${group.entries.length === 1 ? "entry" : "entries"}`,
+  });
+  els.entryModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  els.closeEntriesButton.focus();
+}
+
+function getReportSignedAmount(entry) {
+  const amount = Number(entry.amount || 0);
+  return isExpenseCategory(entry.category) ? -amount : amount;
+}
+
+function formatReportMoney(value) {
+  return value < 0 ? `-${money(Math.abs(value))}` : money(value);
+}
+
+function getReportInitials(value) {
+  const words = String(value || "?")
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]?.toUpperCase()).join("") || "?";
 }
 
 function renderTrend(period) {
