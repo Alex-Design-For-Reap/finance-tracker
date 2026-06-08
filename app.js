@@ -31,6 +31,7 @@ const LEGACY_STORAGE_KEY = "weekly-finance-tracker:v1";
 const PLAN_STORAGE_KEY = "finance-tracker-plan-overrides:v2";
 const HISTORICAL_SEED_KEY = "finance-tracker-historical-actuals:v2";
 const HISTORICAL_ACTUAL_MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04"];
+const IMPORT_SOURCE_PREFIX = "csv-import:";
 const RECURRENCE_FREQUENCIES = {
   once: { label: "One-time" },
   weekly: { label: "Weekly", days: 7 },
@@ -122,9 +123,11 @@ const els = {
   saveButton: document.querySelector("#saveButton"),
   viewEntriesButton: document.querySelector("#viewEntriesButton"),
   bulkEntriesButton: document.querySelector("#bulkEntriesButton"),
+  importCsvButton: document.querySelector("#importCsvButton"),
   editPlanButton: document.querySelector("#editPlanButton"),
   closeEntriesButton: document.querySelector("#closeEntriesButton"),
   closeBulkButton: document.querySelector("#closeBulkButton"),
+  closeImportButton: document.querySelector("#closeImportButton"),
   entryModal: document.querySelector("#entryModal"),
   entryModalTitle: document.querySelector("#entryModalTitle"),
   entryModalSummary: document.querySelector("#entryModalSummary"),
@@ -133,6 +136,12 @@ const els = {
   bulkEntryRows: document.querySelector("#bulkEntryRows"),
   addBulkRowButton: document.querySelector("#addBulkRowButton"),
   saveBulkButton: document.querySelector("#saveBulkButton"),
+  importModal: document.querySelector("#importModal"),
+  csvFileInput: document.querySelector("#csvFileInput"),
+  importModalSummary: document.querySelector("#importModalSummary"),
+  importRows: document.querySelector("#importRows"),
+  clearImportButton: document.querySelector("#clearImportButton"),
+  saveImportButton: document.querySelector("#saveImportButton"),
   planModal: document.querySelector("#planModal"),
   closePlanButton: document.querySelector("#closePlanButton"),
   planMonthSelect: document.querySelector("#planMonthSelect"),
@@ -211,6 +220,7 @@ let deletedBulkEntryIds = new Set();
 let entryModalContext = null;
 let activeAppView = "dashboard";
 const collapsedReportCategories = new Set();
+let importedCsvRows = [];
 
 init();
 
@@ -240,12 +250,17 @@ function setupTrackerListeners() {
   els.saveButton.addEventListener("click", saveEntry);
   els.viewEntriesButton.addEventListener("click", openEntryModal);
   els.bulkEntriesButton.addEventListener("click", openBulkModal);
+  els.importCsvButton.addEventListener("click", openImportModal);
   els.editPlanButton.addEventListener("click", openPlanModal);
   els.closeEntriesButton.addEventListener("click", closeEntryModal);
   els.closeBulkButton.addEventListener("click", closeBulkModal);
+  els.closeImportButton.addEventListener("click", closeImportModal);
   els.closePlanButton.addEventListener("click", closePlanModal);
   els.addBulkRowButton.addEventListener("click", () => addBulkRow());
   els.saveBulkButton.addEventListener("click", saveBulkEntries);
+  els.csvFileInput.addEventListener("change", handleCsvFile);
+  els.clearImportButton.addEventListener("click", clearImportedCsv);
+  els.saveImportButton.addEventListener("click", saveImportedEntries);
   els.planMonthSelect.addEventListener("change", renderPlanEditor);
   els.planSectionSelect.addEventListener("change", renderPlanEditor);
   els.savePlanButton.addEventListener("click", savePlanEditor);
@@ -274,6 +289,9 @@ function setupTrackerListeners() {
   els.bulkModal.addEventListener("click", (event) => {
     if (event.target.matches("[data-close-bulk-modal]")) closeBulkModal();
   });
+  els.importModal.addEventListener("click", (event) => {
+    if (event.target.matches("[data-close-import-modal]")) closeImportModal();
+  });
   els.recurringModal.addEventListener("click", (event) => {
     if (event.target.matches("[data-close-recurring-modal]")) closeRecurringModal();
   });
@@ -284,6 +302,7 @@ function setupTrackerListeners() {
     if (event.key === "Escape") {
       closeEntryModal();
       closeBulkModal();
+      closeImportModal();
       closePlanModal();
       closeRecurringModal();
       closeNetWorthModal();
@@ -342,6 +361,7 @@ function setupAuthListeners() {
       updateDashboardVisibility();
       closeEntryModal();
       closeBulkModal();
+      closeImportModal();
       closePlanModal();
       closeRecurringModal();
       closeNetWorthModal();
@@ -888,6 +908,145 @@ function saveBulkEntries() {
   deletedBulkEntryIds = new Set();
   syncPeriodToDate();
   renderBulkEntries();
+}
+
+function openImportModal() {
+  renderImportRows();
+  els.importModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  els.csvFileInput.focus();
+}
+
+function closeImportModal() {
+  els.importModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+async function handleCsvFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    importedCsvRows = parseBankCsv(text).map((row) => ({
+      ...row,
+      id: crypto.randomUUID(),
+      selected: !isImportedDuplicate(row.fingerprint),
+      type: row.signedAmount < 0 ? "expense" : "credit",
+      category: row.signedAmount < 0 ? els.categorySelect.value : INCOME_SECTION,
+      subcategory: row.signedAmount < 0 ? els.subcategorySelect.value : getFirstSubcategory(INCOME_SECTION),
+      accountId: "",
+    }));
+    renderImportRows();
+  } catch (error) {
+    console.warn("CSV import failed.", error);
+    importedCsvRows = [];
+    els.importRows.replaceChildren();
+    els.importModalSummary.textContent = "Could not read that CSV. Check it has date, description, and amount columns.";
+  }
+}
+
+function clearImportedCsv() {
+  importedCsvRows = [];
+  els.csvFileInput.value = "";
+  renderImportRows();
+}
+
+function renderImportRows() {
+  els.importRows.replaceChildren();
+  const duplicateCount = importedCsvRows.filter((row) => isImportedDuplicate(row.fingerprint)).length;
+  els.importModalSummary.textContent = importedCsvRows.length
+    ? `${importedCsvRows.length} rows ready · ${duplicateCount} duplicate ${duplicateCount === 1 ? "match" : "matches"}`
+    : "Choose a CSV exported from your bank.";
+
+  const header = document.createElement("div");
+  header.className = "import-entry-header";
+  header.innerHTML = `
+    <span>Import</span>
+    <span>Date</span>
+    <span>Description</span>
+    <span>Amount</span>
+    <span>Type</span>
+    <span>Bucket</span>
+    <span>Subcategory</span>
+    <span>Account</span>
+  `;
+  els.importRows.append(header);
+
+  if (!importedCsvRows.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-entries";
+    empty.textContent = "No CSV rows loaded yet.";
+    els.importRows.append(empty);
+    return;
+  }
+
+  importedCsvRows.forEach((item) => {
+    const row = document.createElement("div");
+    const duplicate = isImportedDuplicate(item.fingerprint);
+    row.className = `import-entry-row ${duplicate ? "is-duplicate" : ""}`;
+    row.dataset.importId = item.id;
+    row.innerHTML = `
+      <label class="import-check">
+        <input class="import-selected" type="checkbox" ${item.selected ? "checked" : ""} ${duplicate ? "disabled" : ""} />
+        <span>${duplicate ? "Duplicate" : "Use"}</span>
+      </label>
+      <input class="import-date" type="date" value="${item.date}" />
+      <span class="import-description">${escapeHtml(item.description || "Imported transaction")}</span>
+      <input class="import-amount" type="text" inputmode="decimal" value="${formatPlanInput(item.amount)}" />
+      <select class="import-type"></select>
+      <select class="import-category"></select>
+      <select class="import-subcategory"></select>
+      <select class="import-account"></select>
+    `;
+
+    const typeSelect = row.querySelector(".import-type");
+    const categorySelect = row.querySelector(".import-category");
+    const subcategorySelect = row.querySelector(".import-subcategory");
+    const accountSelect = row.querySelector(".import-account");
+    populateEntryTypeSelect(typeSelect, item.type);
+    populateCategorySelect(categorySelect, item.category);
+    populateSubcategorySelect(subcategorySelect, categorySelect.value, item.subcategory);
+    populateAccountSelect(accountSelect, item.accountId);
+    categorySelect.addEventListener("change", () => populateSubcategorySelect(subcategorySelect, categorySelect.value));
+    els.importRows.append(row);
+  });
+}
+
+function saveImportedEntries() {
+  const now = new Date().toISOString();
+  const importedEntries = [...els.importRows.querySelectorAll(".import-entry-row")]
+    .map((row) => {
+      const item = importedCsvRows.find((current) => current.id === row.dataset.importId);
+      const selected = row.querySelector(".import-selected").checked;
+      const amount = parseAmount(row.querySelector(".import-amount").value);
+      const date = row.querySelector(".import-date").value;
+      if (!item || !selected || !date || !Number.isFinite(amount) || amount <= 0 || isImportedDuplicate(item.fingerprint)) return null;
+      return normalizeEntry({
+        id: crypto.randomUUID(),
+        amount,
+        type: row.querySelector(".import-type").value,
+        date,
+        category: row.querySelector(".import-category").value,
+        subcategory: row.querySelector(".import-subcategory").value,
+        accountId: row.querySelector(".import-account").value,
+        description: item.description,
+        source: `${IMPORT_SOURCE_PREFIX}${item.fingerprint}`,
+        createdAt: now,
+      });
+    })
+    .filter(Boolean);
+
+  if (!importedEntries.length) {
+    els.importModalSummary.textContent = "No new selected rows to save.";
+    return;
+  }
+
+  entries = [...entries, ...importedEntries];
+  saveEntries();
+  syncPeriodToDate();
+  importedCsvRows = importedCsvRows.map((row) => ({ ...row, selected: false }));
+  renderImportRows();
+  render();
 }
 
 function openEntryModal() {
@@ -2602,6 +2761,129 @@ function loadEntries() {
 
 function parseAmount(value) {
   return Number(String(value).replace(/,/g, "").trim());
+}
+
+function parseBankCsv(text) {
+  const rows = parseCsvRows(text);
+  if (rows.length < 2) throw new Error("CSV has no transaction rows.");
+
+  const headers = rows[0].map(normalizeCsvHeader);
+  const records = rows.slice(1).filter((row) => row.some((cell) => String(cell).trim()));
+  const dateIndex = findCsvColumn(headers, ["date", "transaction date", "posted date", "effective date"]);
+  const descriptionIndex = findCsvColumn(headers, ["description", "details", "transaction description", "merchant", "narrative", "payee"]);
+  const amountIndex = findCsvColumn(headers, ["amount", "transaction amount", "value"]);
+  const debitIndex = findCsvColumn(headers, ["debit", "withdrawal", "debits", "money out"]);
+  const creditIndex = findCsvColumn(headers, ["credit", "deposit", "credits", "money in"]);
+
+  if (dateIndex < 0 || descriptionIndex < 0 || (amountIndex < 0 && debitIndex < 0 && creditIndex < 0)) {
+    throw new Error("Missing required columns.");
+  }
+
+  return records
+    .map((row) => {
+      const date = parseCsvDate(row[dateIndex]);
+      const description = String(row[descriptionIndex] || "").trim();
+      const signedAmount = getCsvSignedAmount(row, amountIndex, debitIndex, creditIndex);
+      const amount = Math.abs(signedAmount);
+      if (!date || !description || !Number.isFinite(amount) || amount <= 0) return null;
+      const fingerprint = createImportFingerprint({ date, description, signedAmount });
+      return { date, description, signedAmount, amount, fingerprint };
+    })
+    .filter(Boolean);
+}
+
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  const source = String(text || "").replace(/^\uFEFF/, "");
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    const next = source[index + 1];
+    if (char === "\"") {
+      if (quoted && next === "\"") {
+        cell += "\"";
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (char === "," && !quoted) {
+      row.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell.trim());
+      if (row.some((value) => value !== "")) rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+    cell += char;
+  }
+
+  row.push(cell.trim());
+  if (row.some((value) => value !== "")) rows.push(row);
+  return rows;
+}
+
+function normalizeCsvHeader(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function findCsvColumn(headers, candidates) {
+  const exactIndex = headers.findIndex((header) => candidates.includes(header));
+  if (exactIndex >= 0) return exactIndex;
+  return headers.findIndex((header) => candidates.some((candidate) => header.includes(candidate)));
+}
+
+function getCsvSignedAmount(row, amountIndex, debitIndex, creditIndex) {
+  if (amountIndex >= 0) return parseCurrencyAmount(row[amountIndex]);
+  const debit = debitIndex >= 0 ? parseCurrencyAmount(row[debitIndex]) : 0;
+  const credit = creditIndex >= 0 ? parseCurrencyAmount(row[creditIndex]) : 0;
+  if (credit) return Math.abs(credit);
+  if (debit) return -Math.abs(debit);
+  return 0;
+}
+
+function parseCurrencyAmount(value) {
+  const cleaned = String(value || "")
+    .replace(/\$/g, "")
+    .replace(/,/g, "")
+    .replace(/\s/g, "")
+    .trim();
+  if (!cleaned) return 0;
+  const isWrappedNegative = cleaned.startsWith("(") && cleaned.endsWith(")");
+  const number = Number(cleaned.replace(/[()]/g, ""));
+  if (!Number.isFinite(number)) return 0;
+  return isWrappedNegative ? -Math.abs(number) : number;
+}
+
+function parseCsvDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+  const slash = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (slash) {
+    const year = slash[3].length === 2 ? `20${slash[3]}` : slash[3];
+    return `${year}-${slash[2].padStart(2, "0")}-${slash[1].padStart(2, "0")}`;
+  }
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? "" : dateKey(parsed);
+}
+
+function createImportFingerprint({ date, description, signedAmount }) {
+  return `${date}|${description.toLowerCase().replace(/\s+/g, " ").trim()}|${Number(signedAmount || 0).toFixed(2)}`;
+}
+
+function isImportedDuplicate(fingerprint) {
+  return entries.some((entry) => entry.source === `${IMPORT_SOURCE_PREFIX}${fingerprint}`);
 }
 
 function formatPlanInput(value) {

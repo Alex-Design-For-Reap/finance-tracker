@@ -296,6 +296,19 @@ body.modal-open {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
+.import-modal {
+  width: min(1180px, 100%);
+  max-height: min(88vh, 820px);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.import-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.5fr) minmax(260px, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
 .bulk-table-wrap {
   overflow: auto;
   padding-right: 4px;
@@ -307,15 +320,33 @@ body.modal-open {
   min-width: 1160px;
 }
 
-.bulk-entry-header,
-.bulk-entry-row {
+.import-rows {
   display: grid;
-  grid-template-columns: 140px 120px minmax(145px, 0.75fr) minmax(170px, 0.95fr) minmax(210px, 1fr) minmax(190px, 0.9fr) 92px;
+  gap: 8px;
+  min-width: 1320px;
+}
+
+.bulk-entry-header,
+.bulk-entry-row,
+.import-entry-header,
+.import-entry-row {
+  display: grid;
   align-items: center;
   gap: 8px;
 }
 
-.bulk-entry-header {
+.bulk-entry-header,
+.bulk-entry-row {
+  grid-template-columns: 140px 120px minmax(145px, 0.75fr) minmax(170px, 0.95fr) minmax(210px, 1fr) minmax(190px, 0.9fr) 92px;
+}
+
+.import-entry-header,
+.import-entry-row {
+  grid-template-columns: 78px 132px minmax(260px, 1.25fr) 116px minmax(145px, 0.7fr) minmax(170px, 0.85fr) minmax(210px, 1fr) minmax(180px, 0.85fr);
+}
+
+.bulk-entry-header,
+.import-entry-header {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -327,18 +358,49 @@ body.modal-open {
   text-transform: uppercase;
 }
 
-.bulk-entry-row {
+.bulk-entry-row,
+.import-entry-row {
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcff;
 }
 
+.import-entry-row.is-duplicate {
+  opacity: 0.68;
+  background: #f7f8fb;
+}
+
 .bulk-entry-row input,
-.bulk-entry-row select {
+.bulk-entry-row select,
+.import-entry-row input,
+.import-entry-row select {
   min-height: 38px;
   padding: 0 9px;
   font-size: 0.82rem;
+}
+
+.import-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.import-check input {
+  width: 16px;
+  min-height: 16px;
+}
+
+.import-description {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 760;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bulk-remove-button {
@@ -1201,6 +1263,7 @@ body.modal-open {
   }
 
   .upcoming-actions,
+  .import-controls,
   .recurring-form {
     grid-template-columns: 1fr;
   }
