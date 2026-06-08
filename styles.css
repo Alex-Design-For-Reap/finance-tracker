@@ -941,12 +941,39 @@ body.modal-open {
 
 .report-group-row {
   margin-top: 6px;
-  border-color: #d8ddff;
-  background: #f7f8ff;
+  grid-template-columns: 54px minmax(0, 1fr) 150px minmax(180px, 0.65fr) 92px;
+  min-height: 78px;
+  border-color: #cbd4ff;
+  background: linear-gradient(135deg, #f4f6ff, #fbfcff);
+  box-shadow: 0 10px 30px rgba(37, 16, 87, 0.06);
 }
 
 .report-group-row .report-copy b {
-  font-size: 1.02rem;
+  font-size: 1.08rem;
+}
+
+.report-group-row .report-icon {
+  width: 48px;
+  height: 48px;
+}
+
+.report-subcategory-row {
+  width: calc(100% - 42px);
+  margin-left: 42px;
+  border-color: #e4e8f4;
+  background: #ffffff;
+}
+
+.report-subcategory-row .report-icon {
+  width: 36px;
+  height: 36px;
+  background: #eef2ff;
+  color: var(--purple-deep);
+  font-size: 0.7rem;
+}
+
+.report-subcategory-row .report-copy b {
+  font-size: 0.92rem;
 }
 
 .report-icon {
@@ -1008,6 +1035,18 @@ body.modal-open {
 
 .report-row.is-negative .report-bar span {
   background: var(--red);
+}
+
+.report-toggle {
+  justify-self: end;
+  min-width: 76px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: var(--purple-soft);
+  color: var(--purple-deep);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-align: center;
 }
 
 .mini-table {
@@ -1173,6 +1212,7 @@ body.modal-open {
   .investment-row,
   .investment-stats,
   .report-row,
+  .report-group-row,
   .entry-row,
   .plan-controls,
   .plan-row,
@@ -1194,6 +1234,15 @@ body.modal-open {
 
   .report-money {
     text-align: left;
+  }
+
+  .report-subcategory-row {
+    width: calc(100% - 18px);
+    margin-left: 18px;
+  }
+
+  .report-toggle {
+    justify-self: start;
   }
 
   .modal-summary {

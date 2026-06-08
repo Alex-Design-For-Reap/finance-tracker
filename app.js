@@ -210,6 +210,7 @@ let dashboardReady = false;
 let deletedBulkEntryIds = new Set();
 let entryModalContext = null;
 let activeAppView = "dashboard";
+const collapsedReportCategories = new Set();
 
 init();
 
@@ -1683,6 +1684,7 @@ function renderEntryReport(period, periodEntries) {
   const sortedGroups = [...categoryGroups.values()].sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
 
   sortedGroups.forEach((group) => {
+    const isCollapsed = collapsedReportCategories.has(group.category);
     els.entryReportList.append(
       createReportRow({
         className: "report-group-row",
@@ -1693,14 +1695,19 @@ function renderEntryReport(period, periodEntries) {
         entries: group.entries,
         category: group.category,
         title: group.category,
+        isGroup: true,
+        isCollapsed,
       }),
     );
+
+    if (isCollapsed) return;
 
     group.rows
       .sort((a, b) => Math.abs(b.total) - Math.abs(a.total))
       .forEach((item) => {
         els.entryReportList.append(
           createReportRow({
+            className: "report-subcategory-row",
             label: item.subcategory,
             detail: `${item.category} · ${item.entries.length} ${item.entries.length === 1 ? "entry" : "entries"}`,
             total: item.total,
@@ -1715,10 +1722,22 @@ function renderEntryReport(period, periodEntries) {
   });
 }
 
-function createReportRow({ className = "", label, detail, total, maxValue, category, subcategory = "", title }) {
+function createReportRow({
+  className = "",
+  label,
+  detail,
+  total,
+  maxValue,
+  category,
+  subcategory = "",
+  title,
+  isGroup = false,
+  isCollapsed = false,
+}) {
   const row = document.createElement("button");
   row.className = `report-row ${className} ${total < 0 ? "is-negative" : "is-positive"}`;
   row.type = "button";
+  if (isGroup) row.setAttribute("aria-expanded", String(!isCollapsed));
   row.innerHTML = `
     <span class="report-icon">${getReportInitials(label)}</span>
     <span class="report-copy">
@@ -1729,14 +1748,24 @@ function createReportRow({ className = "", label, detail, total, maxValue, categ
     <span class="report-bar" aria-hidden="true">
       <span style="width:${(Math.abs(total) / maxValue) * 100}%"></span>
     </span>
+    ${isGroup ? `<span class="report-toggle" aria-hidden="true">${isCollapsed ? "Expand" : "Collapse"}</span>` : ""}
   `;
-  row.addEventListener("click", () =>
+  row.addEventListener("click", () => {
+    if (isGroup) {
+      if (collapsedReportCategories.has(category)) {
+        collapsedReportCategories.delete(category);
+      } else {
+        collapsedReportCategories.add(category);
+      }
+      render();
+      return;
+    }
     openReportEntries({
       title,
       category,
       subcategory,
-    }),
-  );
+    });
+  });
   return row;
 }
 
