@@ -4,6 +4,7 @@ const EXPENSE_SECTIONS = ["Daily Expenses", "Financial Obligations", "Splurge", 
 const INCOME_SECTION = "Income";
 const INVESTMENT_SECTION = "Investments / Savings";
 const ANNUAL_RETURN_RATE = 0.1;
+const PAY_CYCLE_START_DAY = 14;
 const SUPABASE_URL = "https://cqbtorlmiqdpcoxqnrjy.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxYnRvcmxtaXFkcGNveHFucmp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3MjM4NTIsImV4cCI6MjA5NDI5OTg1Mn0.2zZTXBFND6bXTksO6M8KmM0SlKBl8N9cD_mtKaajW6c";
@@ -957,7 +958,7 @@ function buildPeriods(mode) {
   }
   if (mode === "payCycle") {
     return financeData.months.map((month) => {
-      const start = parseDate(`${month.key}-15`);
+      const start = parseDate(`${month.key}-${String(PAY_CYCLE_START_DAY).padStart(2, "0")}`);
       const end = addMonths(start, 1);
       return {
         id: `pay-${month.key}`,
