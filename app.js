@@ -24,6 +24,7 @@ const PLAN_STORAGE_KEY = "finance-tracker-plan-overrides:v2";
 const HISTORICAL_SEED_KEY = "finance-tracker-historical-actuals:v2";
 const HISTORICAL_ACTUAL_MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04"];
 const RECURRENCE_FREQUENCIES = {
+  once: { label: "One-time" },
   weekly: { label: "Weekly", days: 7 },
   fortnightly: { label: "Fortnightly", days: 14 },
   monthly: { label: "Monthly", months: 1 },
@@ -1062,6 +1063,9 @@ function getAllBillOccurrences() {
 function expandRecurringItem(item, start, end) {
   const occurrences = [];
   let dueDate = parseDate(item.nextDueDate);
+  if (item.frequency === "once") {
+    return dueDate >= start && dueDate < end ? [{ ...item, date: dateKey(dueDate) }] : [];
+  }
   let guard = 0;
 
   while (dueDate < start && guard < 400) {

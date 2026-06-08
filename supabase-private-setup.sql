@@ -26,13 +26,20 @@ create table if not exists public.finance_recurring_items (
   name text not null,
   amount numeric not null check (amount > 0),
   flow text not null check (flow in ('expense', 'income', 'saving')),
-  frequency text not null check (frequency in ('weekly', 'fortnightly', 'monthly', 'bimonthly', 'quarterly', 'biannually', 'annually')),
+  frequency text not null check (frequency in ('once', 'weekly', 'fortnightly', 'monthly', 'bimonthly', 'quarterly', 'biannually', 'annually')),
   next_due_date date not null,
   category text not null,
   subcategory text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
+
+alter table public.finance_recurring_items
+  drop constraint if exists finance_recurring_items_frequency_check;
+
+alter table public.finance_recurring_items
+  add constraint finance_recurring_items_frequency_check
+  check (frequency in ('once', 'weekly', 'fortnightly', 'monthly', 'bimonthly', 'quarterly', 'biannually', 'annually'));
 
 create index if not exists finance_entries_user_id_idx
   on public.finance_entries (user_id);
