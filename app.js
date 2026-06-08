@@ -333,15 +333,19 @@ function render() {
   const expenseEntries = periodEntries.filter((entry) => isExpenseCategory(entry.category));
   const moneyOutEntries = expenseEntries.filter((entry) => getEntryType(entry) === "expense");
   const moneyInEntries = periodEntries.filter(isMoneyInEntry);
+  const savedEntries = periodEntries.filter((entry) => entry.category === INVESTMENT_SECTION);
   const moneyOutTotal = sumEntries(moneyOutEntries);
   const moneyInTotal = sumEntries(moneyInEntries);
+  const savedTotal = sumEntries(savedEntries);
   const target = getBudgetForRange(period.start, period.end, getExpenseSections());
 
   els.actualInput.value = "";
-  els.targetTitle.textContent = getTargetTitle(period.mode);
+  els.targetTitle.textContent = "Money saved / invested";
   els.monthBadge.textContent = period.label;
-  els.weeklyTarget.textContent = money(target);
-  els.targetBasis.textContent = `${period.shortLabel} expense plan`;
+  els.weeklyTarget.textContent = money(savedTotal);
+  els.targetBasis.textContent = savedEntries.length
+    ? `${savedEntries.length} ${savedEntries.length === 1 ? "saving/investment entry" : "saving/investment entries"} in this period`
+    : "No savings or investment entries yet";
   els.actualSaved.textContent = money(moneyOutTotal);
   els.savedLabel.textContent = moneyOutEntries.length
     ? `${moneyOutEntries.length} ${moneyOutEntries.length === 1 ? "expense" : "expenses"} in this period`
@@ -395,6 +399,7 @@ function updateLiveVariance() {
   const moneyOutEntries = periodEntries.filter(
     (entry) => isExpenseCategory(entry.category) && getEntryType(entry) === "expense",
   );
+  const savedEntries = periodEntries.filter((entry) => entry.category === INVESTMENT_SECTION);
   const draftAmount = parseAmount(els.actualInput.value);
   const draftEntry = {
     amount: Number.isFinite(draftAmount) ? draftAmount : 0,
@@ -404,10 +409,13 @@ function updateLiveVariance() {
   const draftMoneyIn = isMoneyInEntry(draftEntry) ? draftEntry.amount : 0;
   const draftMoneyOut =
     isExpenseCategory(draftEntry.category) && getEntryType(draftEntry) === "expense" ? draftEntry.amount : 0;
+  const draftSaved = draftEntry.category === INVESTMENT_SECTION ? draftEntry.amount : 0;
   const moneyIn = sumEntries(moneyInEntries) + draftMoneyIn;
   const moneyOut = sumEntries(moneyOutEntries) + draftMoneyOut;
-  const variance = moneyIn - moneyOut;
-  const hasCashFlow = moneyInEntries.length > 0 || moneyOutEntries.length > 0 || draftAmount > 0;
+  const saved = sumEntries(savedEntries) + draftSaved;
+  const variance = moneyIn - moneyOut - saved;
+  const hasCashFlow =
+    moneyInEntries.length > 0 || moneyOutEntries.length > 0 || savedEntries.length > 0 || draftAmount > 0;
 
   els.varianceValue.textContent = hasCashFlow ? money(variance) : "$0";
   els.varianceCard.classList.toggle("is-good", hasCashFlow && variance >= 0);
@@ -417,8 +425,8 @@ function updateLiveVariance() {
       ? `${money(variance)} cash-flow surplus`
       : variance < 0
         ? `${money(Math.abs(variance))} cash-flow deficit`
-        : "Money in and money out are balanced"
-    : "Add money in or money out to compare";
+        : "Money in covers money out and saved/invested"
+    : "Add money in, money out, or saved/invested to compare";
 }
 
 function renderEntryList(context = entryModalContext || createPeriodEntryContext()) {
@@ -1341,12 +1349,6 @@ function getFirstSubcategory(category) {
 
 function isExpenseCategory(category) {
   return EXPENSE_SECTIONS.includes(category);
-}
-
-function getTargetTitle(mode) {
-  if (mode === "month") return "Monthly target";
-  if (mode === "week") return "Calendar week target";
-  return "Pay cycle target";
 }
 
 function getPaceInfo({ actual, target, period, kind }) {
