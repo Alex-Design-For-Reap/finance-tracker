@@ -331,29 +331,28 @@ function render() {
   const period = getSelectedPeriod();
   const periodEntries = getEntriesForPeriod(period);
   const expenseEntries = periodEntries.filter((entry) => isExpenseCategory(entry.category));
-  const incomeEntries = periodEntries.filter((entry) => entry.category === INCOME_SECTION);
-  const actualTotal = sumEntryImpacts(expenseEntries);
+  const moneyOutEntries = expenseEntries.filter((entry) => getEntryType(entry) === "expense");
+  const moneyInEntries = periodEntries.filter(isMoneyInEntry);
+  const moneyOutTotal = sumEntries(moneyOutEntries);
+  const moneyInTotal = sumEntries(moneyInEntries);
   const target = getBudgetForRange(period.start, period.end, getExpenseSections());
-  const incomeTarget = getBudgetForRange(period.start, period.end, [getSection(INCOME_SECTION)]);
-  const actualIncome = sumEntries(incomeEntries);
-  const displayedIncome = incomeEntries.length ? actualIncome : incomeTarget;
 
   els.actualInput.value = "";
   els.targetTitle.textContent = getTargetTitle(period.mode);
   els.monthBadge.textContent = period.label;
   els.weeklyTarget.textContent = money(target);
   els.targetBasis.textContent = `${period.shortLabel} expense plan`;
-  els.actualSaved.textContent = money(actualTotal);
-  els.savedLabel.textContent = expenseEntries.length
-    ? `${expenseEntries.length} ${expenseEntries.length === 1 ? "expense" : "expenses"} in this period`
-    : "No expenses yet";
+  els.actualSaved.textContent = money(moneyOutTotal);
+  els.savedLabel.textContent = moneyOutEntries.length
+    ? `${moneyOutEntries.length} ${moneyOutEntries.length === 1 ? "expense" : "expenses"} in this period`
+    : "No money out yet";
   els.viewEntriesButton.textContent = periodEntries.length
     ? `See list of entries (${periodEntries.length})`
     : "See list of entries";
-  els.monthlyPlan.textContent = money(displayedIncome);
-  els.incomeLabel.textContent = incomeEntries.length
-    ? `${incomeEntries.length} ${incomeEntries.length === 1 ? "income entry" : "income entries"} in this period`
-    : "Income planned for selected period";
+  els.monthlyPlan.textContent = money(moneyInTotal);
+  els.incomeLabel.textContent = moneyInEntries.length
+    ? `${moneyInEntries.length} ${moneyInEntries.length === 1 ? "money in entry" : "money in entries"} in this period`
+    : "No money in yet";
 
   if (els.entryModal.getAttribute("aria-hidden") === "false" && entryModalContext) {
     renderEntryList(entryModalContext);
@@ -1682,6 +1681,10 @@ function getEntryImpact(entry) {
   const amount = Number(entry?.amount || 0);
   if (!isExpenseCategory(entry?.category)) return amount;
   return getEntryType(entry) === "expense" ? amount : -amount;
+}
+
+function isMoneyInEntry(entry) {
+  return entry.category === INCOME_SECTION || (isExpenseCategory(entry.category) && getEntryType(entry) !== "expense");
 }
 
 function getEntryType(entry) {
