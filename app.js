@@ -8,6 +8,12 @@ const ENTRY_TYPES = {
   credit: "Refund/Credit",
   reserve: "Reserve used",
 };
+const INVESTMENT_SUBCATEGORY_RENAMES = new Map([
+  ["Main Saving (Fire extinguisher)", "Fire extinguisher (Saving)"],
+  ["Main Saving (Fire Extinguisher)", "Fire extinguisher (Saving)"],
+  ["eToro Dai / IBKR", "IBKR"],
+]);
+const INVESTMENT_EXTRA_SUBCATEGORIES = ["Smile (Saving)"];
 const ANNUAL_RETURN_RATE = 0.1;
 const PAY_CYCLE_START_DAY = 14;
 const SUPABASE_URL = "https://cqbtorlmiqdpcoxqnrjy.supabase.co";
@@ -1852,8 +1858,9 @@ function renderInvestments(period, periodEntries) {
 
 function getInvestmentGroups(investmentSection) {
   const groupConfig = [
-    { label: "Main Saving (Fire Extinguisher)", names: ["Main Saving (Fire extinguisher)"] },
-    { label: "Investment USA", names: ["eToro Alex", "Stake Alex", "eToro Dai / IBKR"] },
+    { label: "Fire extinguisher (Saving)", names: ["Fire extinguisher (Saving)"] },
+    { label: "Smile (Saving)", names: ["Smile (Saving)"] },
+    { label: "Investment USA", names: ["eToro Alex", "Stake Alex", "IBKR"] },
     { label: "Investment AUS", names: ["Vanguard"] },
     { label: "Salary Sacrifice", names: ["Salary Sacrifice"] },
   ];
@@ -2001,6 +2008,60 @@ function getFirstSubcategory(category) {
   return getSection(category)?.rows[0]?.name || "";
 }
 
+function normalizeFinanceData(data) {
+  if (!data?.sections) return data;
+  const investmentSection = data.sections.find((section) => section.name === INVESTMENT_SECTION);
+  if (!investmentSection?.rows) return data;
+
+  const rowsByName = new Map();
+  investmentSection.rows.forEach((row) => {
+    const name = normalizeInvestmentSubcategory(row.name);
+    const values = { ...(row.values || {}) };
+    if (!rowsByName.has(name)) {
+      rowsByName.set(name, { ...row, name, values });
+      return;
+    }
+
+    const existing = rowsByName.get(name);
+    Object.entries(values).forEach(([monthKey, amount]) => {
+      existing.values[monthKey] = Number(existing.values[monthKey] || 0) + Number(amount || 0);
+    });
+  });
+
+  const monthValues = Object.fromEntries((data.months || []).map((month) => [month.key, 0]));
+  INVESTMENT_EXTRA_SUBCATEGORIES.forEach((name) => {
+    if (!rowsByName.has(name)) rowsByName.set(name, { name, values: { ...monthValues } });
+  });
+  investmentSection.rows = [...rowsByName.values()];
+  return data;
+}
+
+function normalizeInvestmentSubcategory(name) {
+  return INVESTMENT_SUBCATEGORY_RENAMES.get(name) || name;
+}
+
+function normalizeEntry(entry) {
+  if (entry?.category !== INVESTMENT_SECTION) return entry;
+  return { ...entry, subcategory: normalizeInvestmentSubcategory(entry.subcategory) };
+}
+
+function normalizeRecurringItem(item) {
+  if (item?.category !== INVESTMENT_SECTION) return item;
+  return { ...item, subcategory: normalizeInvestmentSubcategory(item.subcategory) };
+}
+
+function normalizePlanOverrides(overrides) {
+  return Object.entries(overrides || {}).reduce((nextOverrides, [key, amount]) => {
+    const [sectionName, rowName, monthKey] = key.split("::");
+    if (sectionName === INVESTMENT_SECTION) {
+      nextOverrides[getPlanOverrideKey(sectionName, normalizeInvestmentSubcategory(rowName), monthKey)] = amount;
+      return nextOverrides;
+    }
+    nextOverrides[key] = amount;
+    return nextOverrides;
+  }, {});
+}
+
 function isExpenseCategory(category) {
   return EXPENSE_SECTIONS.includes(category);
 }
@@ -2031,6 +2092,7 @@ function getPaceInfo({ actual, target, period, kind }) {
 }
 
 function saveEntries() {
+  entries = entries.map(normalizeEntry);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
   syncEntriesToSupabase();
 }
@@ -2045,7 +2107,7 @@ async function loadPrivateFinanceData() {
     if (error) throw error;
     if (data?.data) {
       setSyncStatus("Private plan loaded", "online");
-      return data.data;
+      return normalizeFinanceData(data.data);
     }
 
     const importedData = await importLocalFinanceData();
@@ -2067,7 +2129,7 @@ async function importLocalFinanceData() {
     const response = await fetch("finance-data.json", { cache: "no-store" });
     if (!response.ok) return null;
 
-    const localData = await response.json();
+    const localData = normalizeFinanceData(await response.json());
     const { error } = await supabase.from(PLAN_DATA_TABLE).upsert(
       {
         user_id: currentUser.id,
@@ -2103,11 +2165,11 @@ async function hydrateFromSupabase() {
     if (entriesError) throw entriesError;
     if (overridesError) throw overridesError;
 
-    entries = mergeEntries(entries, (remoteEntries || []).map(fromSupabaseEntry));
-    planOverrides = {
+    entries = mergeEntries(entries.map(normalizeEntry), (remoteEntries || []).map(fromSupabaseEntry));
+    planOverrides = normalizePlanOverrides({
       ...Object.fromEntries((remoteOverrides || []).map((row) => [fromSupabaseKey(row.override_key), Number(row.amount)])),
       ...planOverrides,
-    };
+    });
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
     localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(planOverrides));
@@ -2177,7 +2239,7 @@ function toSupabaseEntry(entry) {
 }
 
 function fromSupabaseEntry(row) {
-  return {
+  return normalizeEntry({
     id: fromSupabaseKey(row.id),
     amount: Number(row.amount || 0),
     type: row.entry_type || "expense",
@@ -2188,7 +2250,7 @@ function fromSupabaseEntry(row) {
     source: row.source || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
+  });
 }
 
 async function hydrateRecurringItemsFromSupabase() {
@@ -2199,7 +2261,7 @@ async function hydrateRecurringItemsFromSupabase() {
       .eq("user_id", currentUser.id);
     if (error) throw error;
 
-    recurringItems = mergeRecurringItems(recurringItems, (data || []).map(fromSupabaseRecurringItem));
+    recurringItems = mergeRecurringItems(recurringItems.map(normalizeRecurringItem), (data || []).map(fromSupabaseRecurringItem));
     localStorage.setItem(RECURRING_STORAGE_KEY, JSON.stringify(recurringItems));
     await pushRecurringItemsToSupabase();
   } catch (error) {
@@ -2215,6 +2277,7 @@ function mergeRecurringItems(localItems, remoteItems) {
 }
 
 function saveRecurringItems() {
+  recurringItems = recurringItems.map(normalizeRecurringItem);
   localStorage.setItem(RECURRING_STORAGE_KEY, JSON.stringify(recurringItems));
   pushRecurringItemsToSupabase().catch((error) => {
     console.warn("Recurring item sync failed.", error);
@@ -2265,7 +2328,7 @@ function toSupabaseRecurringItem(item) {
 }
 
 function fromSupabaseRecurringItem(row) {
-  return {
+  return normalizeRecurringItem({
     id: fromSupabaseKey(row.id),
     name: row.name,
     amount: Number(row.amount || 0),
@@ -2278,7 +2341,7 @@ function fromSupabaseRecurringItem(row) {
     subcategory: row.subcategory || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
+  });
 }
 
 async function hydrateNetWorthItemsFromSupabase() {
@@ -2395,6 +2458,7 @@ function seedHistoricalActualEntries() {
 }
 
 function savePlanOverrides() {
+  planOverrides = normalizePlanOverrides(planOverrides);
   localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(planOverrides));
   syncPlanOverridesToSupabase();
 }
@@ -2461,7 +2525,7 @@ function fromSupabaseKey(id) {
 
 function loadPlanOverrides() {
   try {
-    return JSON.parse(localStorage.getItem(PLAN_STORAGE_KEY) || "{}");
+    return normalizePlanOverrides(JSON.parse(localStorage.getItem(PLAN_STORAGE_KEY) || "{}"));
   } catch {
     return {};
   }
@@ -2470,7 +2534,7 @@ function loadPlanOverrides() {
 function loadRecurringItems() {
   try {
     const stored = JSON.parse(localStorage.getItem(RECURRING_STORAGE_KEY) || "[]");
-    return Array.isArray(stored) ? stored : [];
+    return Array.isArray(stored) ? stored.map(normalizeRecurringItem) : [];
   } catch {
     return [];
   }
@@ -2489,7 +2553,8 @@ function loadEntries() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const parsedEntries = JSON.parse(stored);
+      return Array.isArray(parsedEntries) ? parsedEntries.map(normalizeEntry) : [];
     } catch {
       return [];
     }
@@ -2504,7 +2569,7 @@ function loadEntries() {
       const week = Number(weekPart || 1);
       const entryDate = dateKey(addDays(monthStart(monthKey), (week - 1) * 7));
       const values = Array.isArray(value) ? value : [{ amount: value }];
-      return values.map((entry) => ({
+      return values.map((entry) => normalizeEntry({
         id: crypto.randomUUID(),
         amount: Number(entry.amount ?? entry),
         date: entry.date || entryDate,
