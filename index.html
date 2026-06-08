@@ -369,6 +369,14 @@
             <input id="recurringDueDateInput" type="date" required />
           </label>
           <label>
+            End date
+            <input id="recurringEndDateInput" type="date" />
+          </label>
+          <label>
+            End after
+            <input id="recurringOccurrenceLimitInput" type="number" inputmode="numeric" min="1" step="1" placeholder="Occurrences" />
+          </label>
+          <label>
             Bucket
             <select id="recurringCategorySelect"></select>
           </label>
@@ -384,6 +392,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=20260608-one-time-upcoming" type="module"></script>
+    <script src="app.js?v=20260608-recurring-limits" type="module"></script>
   </body>
 </html>

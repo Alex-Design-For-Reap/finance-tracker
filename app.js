@@ -113,6 +113,8 @@ const els = {
   recurringAmountInput: document.querySelector("#recurringAmountInput"),
   recurringFrequencySelect: document.querySelector("#recurringFrequencySelect"),
   recurringDueDateInput: document.querySelector("#recurringDueDateInput"),
+  recurringEndDateInput: document.querySelector("#recurringEndDateInput"),
+  recurringOccurrenceLimitInput: document.querySelector("#recurringOccurrenceLimitInput"),
   recurringCategorySelect: document.querySelector("#recurringCategorySelect"),
   recurringSubcategorySelect: document.querySelector("#recurringSubcategorySelect"),
   closeRecurringButton: document.querySelector("#closeRecurringButton"),
@@ -842,6 +844,8 @@ function openRecurringModal(item = null) {
   els.recurringAmountInput.value = item?.amount ?? "";
   els.recurringFrequencySelect.value = item?.frequency || "monthly";
   els.recurringDueDateInput.value = item?.nextDueDate || els.entryDateInput.value || getDefaultEntryDateKey();
+  els.recurringEndDateInput.value = item?.endDate || "";
+  els.recurringOccurrenceLimitInput.value = item?.occurrenceLimit || "";
   els.recurringFlowSelect.value = item?.flow || "expense";
   populateCategorySelect(els.recurringCategorySelect, item?.category || getRecurringDefaultCategory(els.recurringFlowSelect.value));
   populateSubcategorySelect(
@@ -871,6 +875,7 @@ function saveRecurringItem(event) {
 
   const now = new Date().toISOString();
   const id = els.recurringIdInput.value || crypto.randomUUID();
+  const occurrenceLimit = Number(els.recurringOccurrenceLimitInput.value || 0);
   const item = {
     id,
     name: els.recurringNameInput.value.trim(),
@@ -878,6 +883,8 @@ function saveRecurringItem(event) {
     flow: els.recurringFlowSelect.value,
     frequency: els.recurringFrequencySelect.value,
     nextDueDate: els.recurringDueDateInput.value,
+    endDate: els.recurringEndDateInput.value || "",
+    occurrenceLimit: Number.isInteger(occurrenceLimit) && occurrenceLimit > 0 ? occurrenceLimit : null,
     category: els.recurringCategorySelect.value,
     subcategory: els.recurringSubcategorySelect.value,
     createdAt: recurringItems.find((current) => current.id === id)?.createdAt || now,
@@ -1036,7 +1043,7 @@ function renderRecurringItems() {
       <span class="recurring-copy">
         <b>${escapeHtml(item.name)}</b>
         <small>${money(item.amount)} · ${RECURRING_FLOWS[item.flow]} · ${RECURRENCE_FREQUENCIES[item.frequency]?.label || item.frequency}</small>
-        <small>Next due ${formatDisplayDate(item.nextDueDate)} · ${item.category} · ${item.subcategory}</small>
+        <small>Next due ${formatDisplayDate(item.nextDueDate)} · ${item.category} · ${item.subcategory}${getRecurringLimitLabel(item)}</small>
       </span>
       <button type="button" data-edit-recurring="${item.id}">Edit</button>
       <button type="button" data-delete-recurring="${item.id}">Delete</button>
@@ -1064,22 +1071,31 @@ function expandRecurringItem(item, start, end) {
   const occurrences = [];
   let dueDate = parseDate(item.nextDueDate);
   if (item.frequency === "once") {
-    return dueDate >= start && dueDate < end ? [{ ...item, date: dateKey(dueDate) }] : [];
+    return isRecurringDateAllowed(item, dueDate, 1) && dueDate >= start && dueDate < end ? [{ ...item, date: dateKey(dueDate) }] : [];
   }
   let guard = 0;
+  let occurrenceNumber = 1;
 
   while (dueDate < start && guard < 400) {
     dueDate = getNextRecurringDate(dueDate, item.frequency);
+    occurrenceNumber += 1;
     guard += 1;
   }
 
-  while (dueDate < end && guard < 800) {
+  while (dueDate < end && guard < 800 && isRecurringDateAllowed(item, dueDate, occurrenceNumber)) {
     occurrences.push({ ...item, date: dateKey(dueDate) });
     dueDate = getNextRecurringDate(dueDate, item.frequency);
+    occurrenceNumber += 1;
     guard += 1;
   }
 
   return occurrences;
+}
+
+function isRecurringDateAllowed(item, dueDate, occurrenceNumber) {
+  if (item.endDate && dueDate > parseDate(item.endDate)) return false;
+  if (item.occurrenceLimit && occurrenceNumber > Number(item.occurrenceLimit)) return false;
+  return true;
 }
 
 function getNextRecurringDate(date, frequency) {
@@ -1090,6 +1106,13 @@ function getNextRecurringDate(date, frequency) {
 
 function sumOccurrenceAmounts(items) {
   return items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+
+function getRecurringLimitLabel(item) {
+  const labels = [];
+  if (item.endDate) labels.push(`ends ${formatDisplayDate(item.endDate)}`);
+  if (item.occurrenceLimit) labels.push(`${item.occurrenceLimit} ${Number(item.occurrenceLimit) === 1 ? "occurrence" : "occurrences"}`);
+  return labels.length ? ` · ${labels.join(" · ")}` : "";
 }
 
 function populateCategoryOptions() {
@@ -1954,6 +1977,8 @@ function toSupabaseRecurringItem(item) {
     flow: item.flow,
     frequency: item.frequency,
     next_due_date: item.nextDueDate,
+    end_date: item.endDate || null,
+    occurrence_limit: item.occurrenceLimit || null,
     category: item.category,
     subcategory: item.subcategory || null,
     created_at: item.createdAt || new Date().toISOString(),
@@ -1969,6 +1994,8 @@ function fromSupabaseRecurringItem(row) {
     flow: row.flow,
     frequency: row.frequency,
     nextDueDate: row.next_due_date,
+    endDate: row.end_date || "",
+    occurrenceLimit: row.occurrence_limit || null,
     category: row.category,
     subcategory: row.subcategory || "",
     createdAt: row.created_at,

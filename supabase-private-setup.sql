@@ -28,6 +28,8 @@ create table if not exists public.finance_recurring_items (
   flow text not null check (flow in ('expense', 'income', 'saving')),
   frequency text not null check (frequency in ('once', 'weekly', 'fortnightly', 'monthly', 'bimonthly', 'quarterly', 'biannually', 'annually')),
   next_due_date date not null,
+  end_date date,
+  occurrence_limit integer check (occurrence_limit is null or occurrence_limit > 0),
   category text not null,
   subcategory text,
   created_at timestamptz default now(),
@@ -40,6 +42,19 @@ alter table public.finance_recurring_items
 alter table public.finance_recurring_items
   add constraint finance_recurring_items_frequency_check
   check (frequency in ('once', 'weekly', 'fortnightly', 'monthly', 'bimonthly', 'quarterly', 'biannually', 'annually'));
+
+alter table public.finance_recurring_items
+  add column if not exists end_date date;
+
+alter table public.finance_recurring_items
+  add column if not exists occurrence_limit integer;
+
+alter table public.finance_recurring_items
+  drop constraint if exists finance_recurring_items_occurrence_limit_check;
+
+alter table public.finance_recurring_items
+  add constraint finance_recurring_items_occurrence_limit_check
+  check (occurrence_limit is null or occurrence_limit > 0);
 
 create index if not exists finance_entries_user_id_idx
   on public.finance_entries (user_id);
