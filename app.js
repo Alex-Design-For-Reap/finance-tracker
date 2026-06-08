@@ -903,10 +903,11 @@ function removeRecurringItem(id) {
 function renderUpcoming() {
   if (!financeData || !els.upcomingOccurrenceList) return;
 
-  const horizonDays = Number(els.forecastHorizonSelect.value || 90);
   const today = startOfDay(new Date());
-  const forecastEnd = addDays(today, horizonDays + 1);
-  const occurrences = getRecurringOccurrences(today, forecastEnd);
+  const forecast = getForecastRange(els.forecastHorizonSelect.value, today);
+  const occurrences = forecast.mode === "all-bills"
+    ? getAllBillOccurrences()
+    : getRecurringOccurrences(forecast.start, forecast.end);
   const moneyInItems = occurrences.filter((item) => item.flow === "income");
   const moneyOutItems = occurrences.filter((item) => item.flow === "expense");
   const savedItems = occurrences.filter((item) => item.flow === "saving");
@@ -935,6 +936,38 @@ function renderUpcoming() {
 
   renderUpcomingOccurrences(occurrences);
   renderRecurringItems();
+}
+
+function getForecastRange(value, today = startOfDay(new Date())) {
+  if (value === "next-7") return { mode: value, start: today, end: addDays(today, 8) };
+  if (value === "next-14") return { mode: value, start: today, end: addDays(today, 15) };
+  if (value === "next-30") return { mode: value, start: today, end: addDays(today, 31) };
+  if (value === "this-month") {
+    return {
+      mode: value,
+      start: monthStart(dateKey(today).slice(0, 7)),
+      end: addMonths(monthStart(dateKey(today).slice(0, 7)), 1),
+    };
+  }
+  if (value === "next-month") {
+    const nextMonthStart = addMonths(monthStart(dateKey(today).slice(0, 7)), 1);
+    return { mode: value, start: nextMonthStart, end: addMonths(nextMonthStart, 1) };
+  }
+  if (value === "this-pay-cycle") {
+    const start = getPayCycleStartForDate(today);
+    return { mode: value, start, end: addMonths(start, 1) };
+  }
+  if (value === "next-pay-cycle") {
+    const start = addMonths(getPayCycleStartForDate(today), 1);
+    return { mode: value, start, end: addMonths(start, 1) };
+  }
+  return { mode: "all-bills", start: today, end: null };
+}
+
+function getPayCycleStartForDate(date) {
+  const currentMonthStart = monthStart(dateKey(date).slice(0, 7));
+  const candidate = parseDate(`${dateKey(currentMonthStart).slice(0, 7)}-${String(PAY_CYCLE_START_DAY).padStart(2, "0")}`);
+  return date >= candidate ? candidate : addMonths(candidate, -1);
 }
 
 function renderUpcomingOccurrences(occurrences) {
@@ -1016,6 +1049,13 @@ function renderRecurringItems() {
 function getRecurringOccurrences(start, end) {
   return recurringItems
     .flatMap((item) => expandRecurringItem(item, start, end))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+}
+
+function getAllBillOccurrences() {
+  return recurringItems
+    .filter((item) => item.flow === "expense")
+    .map((item) => ({ ...item, date: item.nextDueDate }))
     .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
 }
 

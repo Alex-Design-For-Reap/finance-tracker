@@ -196,11 +196,14 @@
             <label>
               Forecast
               <select id="forecastHorizonSelect">
-                <option value="30">Next 30 days</option>
-                <option value="60">Next 60 days</option>
-                <option value="90" selected>Next 90 days</option>
-                <option value="180">Next 6 months</option>
-                <option value="365">Next 12 months</option>
+                <option value="next-7">Next 7 days</option>
+                <option value="next-14">Next 14 days</option>
+                <option value="next-30" selected>Next 30 days</option>
+                <option value="this-month">This month</option>
+                <option value="next-month">Next month</option>
+                <option value="this-pay-cycle">This payment cycle</option>
+                <option value="next-pay-cycle">Next payment cycle</option>
+                <option value="all-bills">All bills</option>
               </select>
             </label>
             <button id="addRecurringButton" type="button">Add recurring item</button>
@@ -380,6 +383,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=20260608-upcoming" type="module"></script>
+    <script src="app.js?v=20260608-forecast-options" type="module"></script>
   </body>
 </html>
