@@ -917,63 +917,69 @@ body.modal-open {
 
 .entry-report-list {
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
-.report-row {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 140px minmax(170px, 0.7fr);
-  align-items: center;
-  gap: 14px;
-  min-height: 68px;
-  padding: 12px;
-  border: 1px solid var(--line);
+.report-bucket-card {
+  overflow: hidden;
+  border: 1px solid #cfd8ff;
   border-radius: 8px;
   background: #ffffff;
+  box-shadow: 0 10px 30px rgba(37, 16, 87, 0.06);
+}
+
+.report-bucket-header,
+.report-subcategory-row {
+  display: grid;
+  align-items: center;
   color: var(--ink);
   text-align: left;
 }
 
-.report-row:hover {
-  border-color: #c8d2ff;
-  background: #fbfcff;
-}
-
-.report-group-row {
-  margin-top: 6px;
-  grid-template-columns: 54px minmax(0, 1fr) 150px minmax(180px, 0.65fr) 92px;
+.report-bucket-header {
+  grid-template-columns: 54px minmax(0, 1fr) 150px minmax(180px, 0.65fr) 42px;
+  gap: 14px;
   min-height: 78px;
-  border-color: #cbd4ff;
+  width: 100%;
+  padding: 14px 16px;
   background: linear-gradient(135deg, #f4f6ff, #fbfcff);
-  box-shadow: 0 10px 30px rgba(37, 16, 87, 0.06);
 }
 
-.report-group-row .report-copy b {
+.report-bucket-header:hover {
+  background: #f8faff;
+}
+
+.report-bucket-header .report-copy b {
   font-size: 1.08rem;
 }
 
-.report-group-row .report-icon {
+.report-bucket-header .report-icon {
   width: 48px;
   height: 48px;
 }
 
-.report-subcategory-row {
-  width: calc(100% - 42px);
-  margin-left: 42px;
-  border-color: #e4e8f4;
+.report-subcategory-list {
+  display: grid;
+  gap: 0;
+  padding: 0 16px 14px 78px;
   background: #ffffff;
 }
 
-.report-subcategory-row .report-icon {
-  width: 36px;
-  height: 36px;
-  background: #eef2ff;
-  color: var(--purple-deep);
-  font-size: 0.7rem;
+.report-subcategory-row {
+  grid-template-columns: minmax(0, 1fr) 132px minmax(150px, 0.58fr);
+  gap: 14px;
+  min-height: 46px;
+  padding: 10px 0;
+  border-top: 1px solid #edf1f8;
+  background: transparent;
 }
 
 .report-subcategory-row .report-copy b {
-  font-size: 0.92rem;
+  font-size: 0.88rem;
+}
+
+.report-subcategory-row:hover .report-copy b {
+  color: var(--purple);
 }
 
 .report-icon {
@@ -1015,7 +1021,7 @@ body.modal-open {
   text-align: right;
 }
 
-.report-row.is-negative .report-money {
+.is-negative .report-money {
   color: var(--red);
 }
 
@@ -1033,20 +1039,22 @@ body.modal-open {
   background: var(--purple);
 }
 
-.report-row.is-negative .report-bar span {
+.is-negative .report-bar span {
   background: var(--red);
 }
 
 .report-toggle {
+  display: grid;
+  place-items: center;
   justify-self: end;
-  min-width: 76px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d7dcff;
   border-radius: 999px;
-  padding: 6px 10px;
-  background: var(--purple-soft);
+  background: #ffffff;
   color: var(--purple-deep);
-  font-size: 0.72rem;
+  font-size: 1.1rem;
   font-weight: 900;
-  text-align: center;
 }
 
 .mini-table {
@@ -1211,8 +1219,8 @@ body.modal-open {
   .net-worth-row,
   .investment-row,
   .investment-stats,
-  .report-row,
-  .report-group-row,
+  .report-bucket-header,
+  .report-subcategory-row,
   .entry-row,
   .plan-controls,
   .plan-row,
@@ -1236,9 +1244,8 @@ body.modal-open {
     text-align: left;
   }
 
-  .report-subcategory-row {
-    width: calc(100% - 18px);
-    margin-left: 18px;
+  .report-subcategory-list {
+    padding: 0 14px 14px;
   }
 
   .report-toggle {

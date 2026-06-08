@@ -1685,87 +1685,75 @@ function renderEntryReport(period, periodEntries) {
 
   sortedGroups.forEach((group) => {
     const isCollapsed = collapsedReportCategories.has(group.category);
-    els.entryReportList.append(
-      createReportRow({
-        className: "report-group-row",
-        label: group.category,
-        detail: `${group.rows.length} ${group.rows.length === 1 ? "subcategory" : "subcategories"} · ${group.entries.length} ${group.entries.length === 1 ? "entry" : "entries"}`,
-        total: group.total,
-        maxValue,
-        entries: group.entries,
-        category: group.category,
-        title: group.category,
-        isGroup: true,
-        isCollapsed,
-      }),
-    );
-
-    if (isCollapsed) return;
-
-    group.rows
-      .sort((a, b) => Math.abs(b.total) - Math.abs(a.total))
-      .forEach((item) => {
-        els.entryReportList.append(
-          createReportRow({
-            className: "report-subcategory-row",
-            label: item.subcategory,
-            detail: `${item.category} · ${item.entries.length} ${item.entries.length === 1 ? "entry" : "entries"}`,
-            total: item.total,
-            maxValue,
-            entries: item.entries,
-            category: item.category,
-            subcategory: item.subcategory,
-            title: item.subcategory,
-          }),
-        );
-      });
+    const card = createReportBucketCard({
+      group,
+      maxValue,
+      isCollapsed,
+    });
+    els.entryReportList.append(card);
   });
 }
 
-function createReportRow({
-  className = "",
-  label,
-  detail,
-  total,
-  maxValue,
-  category,
-  subcategory = "",
-  title,
-  isGroup = false,
-  isCollapsed = false,
-}) {
-  const row = document.createElement("button");
-  row.className = `report-row ${className} ${total < 0 ? "is-negative" : "is-positive"}`;
-  row.type = "button";
-  if (isGroup) row.setAttribute("aria-expanded", String(!isCollapsed));
-  row.innerHTML = `
-    <span class="report-icon">${getReportInitials(label)}</span>
+function createReportBucketCard({ group, maxValue, isCollapsed }) {
+  const card = document.createElement("article");
+  card.className = `report-bucket-card ${group.total < 0 ? "is-negative" : "is-positive"}`;
+
+  const header = document.createElement("button");
+  header.className = "report-bucket-header";
+  header.type = "button";
+  header.setAttribute("aria-expanded", String(!isCollapsed));
+  header.innerHTML = `
+    <span class="report-icon">${getReportInitials(group.category)}</span>
     <span class="report-copy">
-      <b>${label}</b>
-      <small>${detail}</small>
+      <b>${group.category}</b>
+      <small>${group.rows.length} ${group.rows.length === 1 ? "subcategory" : "subcategories"} · ${group.entries.length} ${group.entries.length === 1 ? "entry" : "entries"}</small>
     </span>
-    <span class="report-money">${formatReportMoney(total)}</span>
+    <span class="report-money">${formatReportMoney(group.total)}</span>
     <span class="report-bar" aria-hidden="true">
-      <span style="width:${(Math.abs(total) / maxValue) * 100}%"></span>
+      <span style="width:${(Math.abs(group.total) / maxValue) * 100}%"></span>
     </span>
-    ${isGroup ? `<span class="report-toggle" aria-hidden="true">${isCollapsed ? "Expand" : "Collapse"}</span>` : ""}
+    <span class="report-toggle" aria-hidden="true">${isCollapsed ? "+" : "-"}</span>
   `;
-  row.addEventListener("click", () => {
-    if (isGroup) {
-      if (collapsedReportCategories.has(category)) {
-        collapsedReportCategories.delete(category);
-      } else {
-        collapsedReportCategories.add(category);
-      }
-      render();
-      return;
+  header.addEventListener("click", () => {
+    if (collapsedReportCategories.has(group.category)) {
+      collapsedReportCategories.delete(group.category);
+    } else {
+      collapsedReportCategories.add(group.category);
     }
-    openReportEntries({
-      title,
-      category,
-      subcategory,
-    });
+    render();
   });
+
+  card.append(header);
+  if (!isCollapsed) {
+    const subcategoryList = document.createElement("div");
+    subcategoryList.className = "report-subcategory-list";
+    group.rows
+      .sort((a, b) => Math.abs(b.total) - Math.abs(a.total))
+      .forEach((item) => subcategoryList.append(createReportSubcategoryRow(item, maxValue)));
+    card.append(subcategoryList);
+  }
+  return card;
+}
+
+function createReportSubcategoryRow(item, maxValue) {
+  const row = document.createElement("button");
+  row.className = `report-subcategory-row ${item.total < 0 ? "is-negative" : "is-positive"}`;
+  row.type = "button";
+  row.innerHTML = `
+    <span class="report-copy">
+      <b>${item.subcategory}</b>
+      <small>${item.entries.length} ${item.entries.length === 1 ? "entry" : "entries"}</small>
+    </span>
+    <span class="report-money">${formatReportMoney(item.total)}</span>
+    <span class="report-bar" aria-hidden="true">
+      <span style="width:${(Math.abs(item.total) / maxValue) * 100}%"></span>
+    </span>
+  `;
+  row.addEventListener("click", () => openReportEntries({
+    title: item.subcategory,
+    category: item.category,
+    subcategory: item.subcategory,
+  }));
   return row;
 }
 
