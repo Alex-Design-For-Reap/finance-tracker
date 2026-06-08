@@ -390,23 +390,35 @@ function saveEntry() {
 function updateLiveVariance() {
   if (!periods.length) return;
   const period = getSelectedPeriod();
-  const periodEntries = getEntriesForPeriod(period).filter((entry) => isExpenseCategory(entry.category));
-  const currentInput = isExpenseCategory(els.categorySelect.value)
-    ? getEntryImpact({ amount: parseAmount(els.actualInput.value), type: els.entryTypeSelect.value, category: els.categorySelect.value })
-    : 0;
-  const actual = sumEntryImpacts(periodEntries) + (Number.isFinite(currentInput) ? currentInput : 0);
-  const target = getBudgetForRange(period.start, period.end, getExpenseSections());
-  const variance = target - actual;
-  const hasActual = actual > 0;
+  const periodEntries = getEntriesForPeriod(period);
+  const moneyInEntries = periodEntries.filter(isMoneyInEntry);
+  const moneyOutEntries = periodEntries.filter(
+    (entry) => isExpenseCategory(entry.category) && getEntryType(entry) === "expense",
+  );
+  const draftAmount = parseAmount(els.actualInput.value);
+  const draftEntry = {
+    amount: Number.isFinite(draftAmount) ? draftAmount : 0,
+    type: els.entryTypeSelect.value,
+    category: els.categorySelect.value,
+  };
+  const draftMoneyIn = isMoneyInEntry(draftEntry) ? draftEntry.amount : 0;
+  const draftMoneyOut =
+    isExpenseCategory(draftEntry.category) && getEntryType(draftEntry) === "expense" ? draftEntry.amount : 0;
+  const moneyIn = sumEntries(moneyInEntries) + draftMoneyIn;
+  const moneyOut = sumEntries(moneyOutEntries) + draftMoneyOut;
+  const variance = moneyIn - moneyOut;
+  const hasCashFlow = moneyInEntries.length > 0 || moneyOutEntries.length > 0 || draftAmount > 0;
 
-  els.varianceValue.textContent = hasActual ? money(Math.abs(variance)) : "$0";
-  els.varianceCard.classList.toggle("is-good", hasActual && variance >= 0);
-  els.varianceCard.classList.toggle("is-over", hasActual && variance < 0);
-  els.varianceCopy.textContent = hasActual
-    ? variance >= 0
-      ? `${money(variance)} under target`
-      : `${money(Math.abs(variance))} over target`
-    : "Enter actual spend to compare";
+  els.varianceValue.textContent = hasCashFlow ? money(variance) : "$0";
+  els.varianceCard.classList.toggle("is-good", hasCashFlow && variance >= 0);
+  els.varianceCard.classList.toggle("is-over", hasCashFlow && variance < 0);
+  els.varianceCopy.textContent = hasCashFlow
+    ? variance > 0
+      ? `${money(variance)} cash-flow surplus`
+      : variance < 0
+        ? `${money(Math.abs(variance))} cash-flow deficit`
+        : "Money in and money out are balanced"
+    : "Add money in or money out to compare";
 }
 
 function renderEntryList(context = entryModalContext || createPeriodEntryContext()) {
