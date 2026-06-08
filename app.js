@@ -16,11 +16,27 @@ const SUPABASE_ANON_KEY =
 const ENTRIES_TABLE = "finance_entries";
 const PLAN_OVERRIDES_TABLE = "finance_plan_overrides";
 const PLAN_DATA_TABLE = "finance_plan_data";
+const RECURRING_TABLE = "finance_recurring_items";
 const STORAGE_KEY = "finance-tracker-dated-entries:v2";
+const RECURRING_STORAGE_KEY = "finance-tracker-recurring-items:v1";
 const LEGACY_STORAGE_KEY = "weekly-finance-tracker:v1";
 const PLAN_STORAGE_KEY = "finance-tracker-plan-overrides:v2";
 const HISTORICAL_SEED_KEY = "finance-tracker-historical-actuals:v2";
 const HISTORICAL_ACTUAL_MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04"];
+const RECURRENCE_FREQUENCIES = {
+  weekly: { label: "Weekly", days: 7 },
+  fortnightly: { label: "Fortnightly", days: 14 },
+  monthly: { label: "Monthly", months: 1 },
+  bimonthly: { label: "Bi-monthly", months: 2 },
+  quarterly: { label: "Quarterly", months: 3 },
+  biannually: { label: "Biannually", months: 6 },
+  annually: { label: "Annually", months: 12 },
+};
+const RECURRING_FLOWS = {
+  expense: "Expense",
+  income: "Income",
+  saving: "Savings / Investment",
+};
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 if (window.location.protocol === "file:") {
@@ -39,8 +55,26 @@ const els = {
   signOutButton: document.querySelector("#signOutButton"),
   authMessage: document.querySelector("#authMessage"),
   trackerControls: document.querySelector("#trackerControls"),
+  appViewSwitch: document.querySelector("#appViewSwitch"),
+  viewSwitchButtons: document.querySelectorAll("[data-app-view]"),
   dashboardSummary: document.querySelector("#dashboardSummary"),
   dashboardWorkbench: document.querySelector("#dashboardWorkbench"),
+  upcomingView: document.querySelector("#upcomingView"),
+  forecastHorizonSelect: document.querySelector("#forecastHorizonSelect"),
+  addRecurringButton: document.querySelector("#addRecurringButton"),
+  forecastMoneyIn: document.querySelector("#forecastMoneyIn"),
+  forecastMoneyInLabel: document.querySelector("#forecastMoneyInLabel"),
+  forecastMoneyOut: document.querySelector("#forecastMoneyOut"),
+  forecastMoneyOutLabel: document.querySelector("#forecastMoneyOutLabel"),
+  forecastSaved: document.querySelector("#forecastSaved"),
+  forecastSavedLabel: document.querySelector("#forecastSavedLabel"),
+  forecastBalanceCard: document.querySelector("#forecastBalanceCard"),
+  forecastBalance: document.querySelector("#forecastBalance"),
+  forecastBalanceLabel: document.querySelector("#forecastBalanceLabel"),
+  occurrenceCountBadge: document.querySelector("#occurrenceCountBadge"),
+  upcomingOccurrenceList: document.querySelector("#upcomingOccurrenceList"),
+  recurringCountBadge: document.querySelector("#recurringCountBadge"),
+  recurringScheduleList: document.querySelector("#recurringScheduleList"),
   periodModeSelect: document.querySelector("#periodModeSelect"),
   periodSelect: document.querySelector("#periodSelect"),
   entryDateInput: document.querySelector("#entryDateInput"),
@@ -69,6 +103,19 @@ const els = {
   planEditorList: document.querySelector("#planEditorList"),
   savePlanButton: document.querySelector("#savePlanButton"),
   resetPlanButton: document.querySelector("#resetPlanButton"),
+  recurringModal: document.querySelector("#recurringModal"),
+  recurringForm: document.querySelector("#recurringForm"),
+  recurringModalTitle: document.querySelector("#recurringModalTitle"),
+  recurringIdInput: document.querySelector("#recurringIdInput"),
+  recurringNameInput: document.querySelector("#recurringNameInput"),
+  recurringFlowSelect: document.querySelector("#recurringFlowSelect"),
+  recurringAmountInput: document.querySelector("#recurringAmountInput"),
+  recurringFrequencySelect: document.querySelector("#recurringFrequencySelect"),
+  recurringDueDateInput: document.querySelector("#recurringDueDateInput"),
+  recurringCategorySelect: document.querySelector("#recurringCategorySelect"),
+  recurringSubcategorySelect: document.querySelector("#recurringSubcategorySelect"),
+  closeRecurringButton: document.querySelector("#closeRecurringButton"),
+  cancelRecurringButton: document.querySelector("#cancelRecurringButton"),
   targetTitle: document.querySelector("#targetTitle"),
   weeklyTarget: document.querySelector("#weeklyTarget"),
   targetBasis: document.querySelector("#targetBasis"),
@@ -105,11 +152,13 @@ const formatter = new Intl.NumberFormat("en-AU", {
 let financeData;
 let periods = [];
 let entries = loadEntries();
+let recurringItems = loadRecurringItems();
 let planOverrides = loadPlanOverrides();
 let currentUser = null;
 let dashboardReady = false;
 let deletedBulkEntryIds = new Set();
 let entryModalContext = null;
+let activeAppView = "dashboard";
 
 init();
 
@@ -121,6 +170,9 @@ async function init() {
 }
 
 function setupTrackerListeners() {
+  els.viewSwitchButtons.forEach((button) => {
+    button.addEventListener("click", () => setAppView(button.dataset.appView));
+  });
   els.periodModeSelect.addEventListener("change", () => {
     els.entryDateInput.value = getDefaultEntryDateKey();
     populatePeriodOptions(els.entryDateInput.value);
@@ -146,6 +198,15 @@ function setupTrackerListeners() {
   els.planSectionSelect.addEventListener("change", renderPlanEditor);
   els.savePlanButton.addEventListener("click", savePlanEditor);
   els.resetPlanButton.addEventListener("click", resetPlanSection);
+  els.forecastHorizonSelect.addEventListener("change", renderUpcoming);
+  els.addRecurringButton.addEventListener("click", () => openRecurringModal());
+  els.closeRecurringButton.addEventListener("click", closeRecurringModal);
+  els.cancelRecurringButton.addEventListener("click", closeRecurringModal);
+  els.recurringFlowSelect.addEventListener("change", syncRecurringFlowDefaults);
+  els.recurringCategorySelect.addEventListener("change", () => {
+    populateSubcategorySelect(els.recurringSubcategorySelect, els.recurringCategorySelect.value);
+  });
+  els.recurringForm.addEventListener("submit", saveRecurringItem);
   els.entryModal.addEventListener("click", (event) => {
     if (event.target.matches("[data-close-modal]")) closeEntryModal();
   });
@@ -155,11 +216,15 @@ function setupTrackerListeners() {
   els.bulkModal.addEventListener("click", (event) => {
     if (event.target.matches("[data-close-bulk-modal]")) closeBulkModal();
   });
+  els.recurringModal.addEventListener("click", (event) => {
+    if (event.target.matches("[data-close-recurring-modal]")) closeRecurringModal();
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeEntryModal();
       closeBulkModal();
       closePlanModal();
+      closeRecurringModal();
     }
   });
 }
@@ -216,6 +281,7 @@ function setupAuthListeners() {
       closeEntryModal();
       closeBulkModal();
       closePlanModal();
+      closeRecurringModal();
     }
   });
 }
@@ -311,7 +377,9 @@ async function initializeDashboard() {
 
   populateCategoryOptions();
   populatePlanOptions();
+  populateRecurringCategoryOptions();
   els.entryDateInput.value = getDefaultEntryDateKey();
+  els.recurringDueDateInput.value = els.entryDateInput.value;
   populatePeriodOptions(els.entryDateInput.value);
   dashboardReady = true;
   updateDashboardVisibility();
@@ -321,8 +389,10 @@ async function initializeDashboard() {
 function updateDashboardVisibility() {
   const canShowDashboard = Boolean(currentUser && dashboardReady && financeData);
   els.trackerControls.hidden = !canShowDashboard;
-  els.dashboardSummary.hidden = !canShowDashboard;
-  els.dashboardWorkbench.hidden = !canShowDashboard;
+  els.appViewSwitch.hidden = !canShowDashboard;
+  els.dashboardSummary.hidden = !canShowDashboard || activeAppView !== "dashboard";
+  els.dashboardWorkbench.hidden = !canShowDashboard || activeAppView !== "dashboard";
+  els.upcomingView.hidden = !canShowDashboard || activeAppView !== "upcoming";
 }
 
 function render() {
@@ -368,7 +438,17 @@ function render() {
   renderTrend(period);
   renderMiniTable(period);
   renderInvestments(period, periodEntries);
+  renderUpcoming();
   updateLiveVariance();
+}
+
+function setAppView(view) {
+  activeAppView = view === "upcoming" ? "upcoming" : "dashboard";
+  els.viewSwitchButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.appView === activeAppView);
+  });
+  updateDashboardVisibility();
+  render();
 }
 
 function saveEntry() {
@@ -754,6 +834,220 @@ function closePlanModal() {
   document.body.classList.remove("modal-open");
 }
 
+function openRecurringModal(item = null) {
+  els.recurringModalTitle.textContent = item ? "Edit recurring item" : "Add recurring item";
+  els.recurringIdInput.value = item?.id || "";
+  els.recurringNameInput.value = item?.name || "";
+  els.recurringAmountInput.value = item?.amount ?? "";
+  els.recurringFrequencySelect.value = item?.frequency || "monthly";
+  els.recurringDueDateInput.value = item?.nextDueDate || els.entryDateInput.value || getDefaultEntryDateKey();
+  els.recurringFlowSelect.value = item?.flow || "expense";
+  populateCategorySelect(els.recurringCategorySelect, item?.category || getRecurringDefaultCategory(els.recurringFlowSelect.value));
+  populateSubcategorySelect(
+    els.recurringSubcategorySelect,
+    els.recurringCategorySelect.value,
+    item?.subcategory || getFirstSubcategory(els.recurringCategorySelect.value),
+  );
+  els.recurringModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  els.recurringNameInput.focus();
+}
+
+function closeRecurringModal() {
+  els.recurringModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+  els.recurringForm.reset();
+  els.recurringIdInput.value = "";
+}
+
+function saveRecurringItem(event) {
+  event.preventDefault();
+  const amount = parseAmount(els.recurringAmountInput.value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    els.recurringAmountInput.focus();
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const id = els.recurringIdInput.value || crypto.randomUUID();
+  const item = {
+    id,
+    name: els.recurringNameInput.value.trim(),
+    amount,
+    flow: els.recurringFlowSelect.value,
+    frequency: els.recurringFrequencySelect.value,
+    nextDueDate: els.recurringDueDateInput.value,
+    category: els.recurringCategorySelect.value,
+    subcategory: els.recurringSubcategorySelect.value,
+    createdAt: recurringItems.find((current) => current.id === id)?.createdAt || now,
+    updatedAt: now,
+  };
+
+  if (!item.name || !item.nextDueDate) return;
+
+  recurringItems = recurringItems.some((current) => current.id === id)
+    ? recurringItems.map((current) => (current.id === id ? item : current))
+    : [...recurringItems, item];
+  saveRecurringItems();
+  closeRecurringModal();
+  renderUpcoming();
+}
+
+function removeRecurringItem(id) {
+  recurringItems = recurringItems.filter((item) => item.id !== id);
+  saveRecurringItems();
+  deleteSupabaseRecurringItem(id);
+  renderUpcoming();
+}
+
+function renderUpcoming() {
+  if (!financeData || !els.upcomingOccurrenceList) return;
+
+  const horizonDays = Number(els.forecastHorizonSelect.value || 90);
+  const today = startOfDay(new Date());
+  const forecastEnd = addDays(today, horizonDays + 1);
+  const occurrences = getRecurringOccurrences(today, forecastEnd);
+  const moneyInItems = occurrences.filter((item) => item.flow === "income");
+  const moneyOutItems = occurrences.filter((item) => item.flow === "expense");
+  const savedItems = occurrences.filter((item) => item.flow === "saving");
+  const moneyIn = sumOccurrenceAmounts(moneyInItems);
+  const moneyOut = sumOccurrenceAmounts(moneyOutItems);
+  const saved = sumOccurrenceAmounts(savedItems);
+  const balance = moneyIn - moneyOut - saved;
+
+  els.forecastMoneyIn.textContent = money(moneyIn);
+  els.forecastMoneyInLabel.textContent = moneyInItems.length
+    ? `${moneyInItems.length} expected ${moneyInItems.length === 1 ? "payment" : "payments"}`
+    : "No upcoming income";
+  els.forecastMoneyOut.textContent = money(moneyOut);
+  els.forecastMoneyOutLabel.textContent = moneyOutItems.length
+    ? `${moneyOutItems.length} expected ${moneyOutItems.length === 1 ? "bill" : "bills"}`
+    : "No upcoming bills";
+  els.forecastSaved.textContent = money(saved);
+  els.forecastSavedLabel.textContent = savedItems.length
+    ? `${savedItems.length} expected ${savedItems.length === 1 ? "transfer" : "transfers"}`
+    : "No upcoming savings";
+  els.forecastBalance.textContent = money(balance);
+  els.forecastBalanceCard.classList.toggle("is-good", balance >= 0);
+  els.forecastBalanceCard.classList.toggle("is-over", balance < 0);
+  els.forecastBalanceLabel.textContent =
+    balance >= 0 ? `${money(balance)} forecast surplus` : `${money(Math.abs(balance))} forecast deficit`;
+
+  renderUpcomingOccurrences(occurrences);
+  renderRecurringItems();
+}
+
+function renderUpcomingOccurrences(occurrences) {
+  els.upcomingOccurrenceList.replaceChildren();
+  els.occurrenceCountBadge.textContent = `${occurrences.length} ${occurrences.length === 1 ? "item" : "items"}`;
+
+  if (!occurrences.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-entries";
+    empty.textContent = "No recurring items are due in this forecast window yet.";
+    els.upcomingOccurrenceList.append(empty);
+    return;
+  }
+
+  const groups = new Map();
+  occurrences.forEach((occurrence) => {
+    const key = occurrence.date;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(occurrence);
+  });
+
+  groups.forEach((items, date) => {
+    const group = document.createElement("div");
+    group.className = "occurrence-group";
+    const label = document.createElement("p");
+    label.className = "occurrence-date";
+    label.textContent = formatDisplayDate(date);
+    group.append(label);
+
+    items.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = `occurrence-row is-${item.flow}`;
+      row.innerHTML = `
+        <span class="occurrence-marker" aria-hidden="true"></span>
+        <span class="occurrence-copy">
+          <b>${escapeHtml(item.name)}</b>
+          <small>${RECURRING_FLOWS[item.flow]} · ${item.category} · ${item.subcategory} · ${RECURRENCE_FREQUENCIES[item.frequency]?.label || item.frequency}</small>
+        </span>
+        <strong class="occurrence-amount">${money(item.amount)}</strong>
+      `;
+      group.append(row);
+    });
+
+    els.upcomingOccurrenceList.append(group);
+  });
+}
+
+function renderRecurringItems() {
+  els.recurringScheduleList.replaceChildren();
+  const sortedItems = recurringItems.slice().sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
+  els.recurringCountBadge.textContent = `${sortedItems.length} active`;
+
+  if (!sortedItems.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-entries";
+    empty.textContent = "Create a recurring item to forecast bills, income, or savings.";
+    els.recurringScheduleList.append(empty);
+    return;
+  }
+
+  sortedItems.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "recurring-row";
+    row.innerHTML = `
+      <span class="recurring-copy">
+        <b>${escapeHtml(item.name)}</b>
+        <small>${money(item.amount)} · ${RECURRING_FLOWS[item.flow]} · ${RECURRENCE_FREQUENCIES[item.frequency]?.label || item.frequency}</small>
+        <small>Next due ${formatDisplayDate(item.nextDueDate)} · ${item.category} · ${item.subcategory}</small>
+      </span>
+      <button type="button" data-edit-recurring="${item.id}">Edit</button>
+      <button type="button" data-delete-recurring="${item.id}">Delete</button>
+    `;
+    row.querySelector("[data-edit-recurring]").addEventListener("click", () => openRecurringModal(item));
+    row.querySelector("[data-delete-recurring]").addEventListener("click", () => removeRecurringItem(item.id));
+    els.recurringScheduleList.append(row);
+  });
+}
+
+function getRecurringOccurrences(start, end) {
+  return recurringItems
+    .flatMap((item) => expandRecurringItem(item, start, end))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+}
+
+function expandRecurringItem(item, start, end) {
+  const occurrences = [];
+  let dueDate = parseDate(item.nextDueDate);
+  let guard = 0;
+
+  while (dueDate < start && guard < 400) {
+    dueDate = getNextRecurringDate(dueDate, item.frequency);
+    guard += 1;
+  }
+
+  while (dueDate < end && guard < 800) {
+    occurrences.push({ ...item, date: dateKey(dueDate) });
+    dueDate = getNextRecurringDate(dueDate, item.frequency);
+    guard += 1;
+  }
+
+  return occurrences;
+}
+
+function getNextRecurringDate(date, frequency) {
+  const config = RECURRENCE_FREQUENCIES[frequency] || RECURRENCE_FREQUENCIES.monthly;
+  if (config.days) return addDays(date, config.days);
+  return addCalendarMonths(date, config.months || 1);
+}
+
+function sumOccurrenceAmounts(items) {
+  return items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+
 function populateCategoryOptions() {
   els.categorySelect.replaceChildren();
   populateEntryTypeSelect(els.entryTypeSelect);
@@ -799,6 +1093,24 @@ function populateSubcategorySelect(select, category, selectedValue) {
     select.append(option);
   });
   if (selectedValue) select.value = selectedValue;
+}
+
+function populateRecurringCategoryOptions() {
+  const category = getRecurringDefaultCategory(els.recurringFlowSelect.value);
+  populateCategorySelect(els.recurringCategorySelect, category);
+  populateSubcategorySelect(els.recurringSubcategorySelect, category);
+}
+
+function syncRecurringFlowDefaults() {
+  const category = getRecurringDefaultCategory(els.recurringFlowSelect.value);
+  populateCategorySelect(els.recurringCategorySelect, category);
+  populateSubcategorySelect(els.recurringSubcategorySelect, category);
+}
+
+function getRecurringDefaultCategory(flow) {
+  if (flow === "income") return INCOME_SECTION;
+  if (flow === "saving") return INVESTMENT_SECTION;
+  return EXPENSE_SECTIONS[0];
 }
 
 function populatePlanOptions() {
@@ -1458,6 +1770,7 @@ async function hydrateFromSupabase() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
     localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(planOverrides));
     await Promise.all([pushEntriesToSupabase(), pushPlanOverridesToSupabase()]);
+    await hydrateRecurringItemsFromSupabase();
     setSyncStatus("Supabase sync on", "online");
   } catch (error) {
     console.warn("Supabase sync is not ready yet.", error);
@@ -1528,6 +1841,92 @@ function fromSupabaseEntry(row) {
     category: row.category,
     subcategory: row.subcategory || "",
     source: row.source || undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function hydrateRecurringItemsFromSupabase() {
+  try {
+    const { data, error } = await supabase
+      .from(RECURRING_TABLE)
+      .select("*")
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+
+    recurringItems = mergeRecurringItems(recurringItems, (data || []).map(fromSupabaseRecurringItem));
+    localStorage.setItem(RECURRING_STORAGE_KEY, JSON.stringify(recurringItems));
+    await pushRecurringItemsToSupabase();
+  } catch (error) {
+    console.warn("Recurring item sync is not ready yet.", error);
+  }
+}
+
+function mergeRecurringItems(localItems, remoteItems) {
+  const merged = new Map();
+  remoteItems.forEach((item) => merged.set(item.id, item));
+  localItems.forEach((item) => merged.set(item.id, item));
+  return [...merged.values()].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
+}
+
+function saveRecurringItems() {
+  localStorage.setItem(RECURRING_STORAGE_KEY, JSON.stringify(recurringItems));
+  pushRecurringItemsToSupabase().catch((error) => {
+    console.warn("Recurring item sync failed.", error);
+    setSyncStatus("Recurring items saved locally - run Supabase setup", "warning");
+  });
+}
+
+async function pushRecurringItemsToSupabase() {
+  if (!currentUser || !recurringItems.length) return;
+  const { error } = await supabase
+    .from(RECURRING_TABLE)
+    .upsert(recurringItems.map(toSupabaseRecurringItem), { onConflict: "id" });
+  if (error) throw error;
+  setSyncStatus("Supabase sync on", "online");
+}
+
+async function deleteSupabaseRecurringItem(id) {
+  if (!currentUser) return;
+  const { error } = await supabase
+    .from(RECURRING_TABLE)
+    .delete()
+    .eq("id", toSupabaseKey(id))
+    .eq("user_id", currentUser.id);
+  if (error) {
+    console.warn("Recurring item delete sync failed.", error);
+    setSyncStatus("Recurring item deleted locally - run Supabase setup", "warning");
+    return;
+  }
+  setSyncStatus("Supabase sync on", "online");
+}
+
+function toSupabaseRecurringItem(item) {
+  return {
+    id: toSupabaseKey(item.id),
+    user_id: currentUser.id,
+    name: item.name,
+    amount: Number(item.amount || 0),
+    flow: item.flow,
+    frequency: item.frequency,
+    next_due_date: item.nextDueDate,
+    category: item.category,
+    subcategory: item.subcategory || null,
+    created_at: item.createdAt || new Date().toISOString(),
+    updated_at: item.updatedAt || item.createdAt || new Date().toISOString(),
+  };
+}
+
+function fromSupabaseRecurringItem(row) {
+  return {
+    id: fromSupabaseKey(row.id),
+    name: row.name,
+    amount: Number(row.amount || 0),
+    flow: row.flow,
+    frequency: row.frequency,
+    nextDueDate: row.next_due_date,
+    category: row.category,
+    subcategory: row.subcategory || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1638,6 +2037,15 @@ function loadPlanOverrides() {
   }
 }
 
+function loadRecurringItems() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(RECURRING_STORAGE_KEY) || "[]");
+    return Array.isArray(stored) ? stored : [];
+  } catch {
+    return [];
+  }
+}
+
 function loadEntries() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored) {
@@ -1681,6 +2089,15 @@ function formatPlanInput(value) {
 
 function escapeAttribute(value) {
   return String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function sumEntries(items) {
@@ -1748,6 +2165,14 @@ function addDays(date, days) {
 function addMonths(date, months) {
   const copy = new Date(date);
   copy.setMonth(copy.getMonth() + months);
+  return copy;
+}
+
+function addCalendarMonths(date, months) {
+  const day = date.getDate();
+  const copy = new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const lastDay = new Date(copy.getFullYear(), copy.getMonth() + 1, 0).getDate();
+  copy.setDate(Math.min(day, lastDay));
   return copy;
 }
 

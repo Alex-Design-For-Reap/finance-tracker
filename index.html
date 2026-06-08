@@ -83,6 +83,11 @@
         </div>
       </section>
 
+      <nav id="appViewSwitch" class="view-switch" aria-label="Finance views" hidden>
+        <button class="view-switch-button is-active" type="button" data-app-view="dashboard">Dashboard</button>
+        <button class="view-switch-button" type="button" data-app-view="upcoming">Upcoming</button>
+      </nav>
+
       <section id="dashboardSummary" class="kpi-grid" aria-label="Weekly summary" hidden>
         <article class="kpi-card primary">
           <span id="targetTitle">Money saved / invested</span>
@@ -180,6 +185,75 @@
           <div id="investmentRows" class="investment-rows"></div>
         </div>
       </section>
+
+      <section id="upcomingView" class="upcoming-view" hidden>
+        <div class="upcoming-toolbar">
+          <div>
+            <p class="eyebrow">Expected cash flow</p>
+            <h2>Upcoming</h2>
+          </div>
+          <div class="upcoming-actions">
+            <label>
+              Forecast
+              <select id="forecastHorizonSelect">
+                <option value="30">Next 30 days</option>
+                <option value="60">Next 60 days</option>
+                <option value="90" selected>Next 90 days</option>
+                <option value="180">Next 6 months</option>
+                <option value="365">Next 12 months</option>
+              </select>
+            </label>
+            <button id="addRecurringButton" type="button">Add recurring item</button>
+          </div>
+        </div>
+
+        <div class="forecast-kpis">
+          <article class="kpi-card">
+            <span>Expected money in</span>
+            <strong id="forecastMoneyIn">$0</strong>
+            <small id="forecastMoneyInLabel">No upcoming income</small>
+          </article>
+          <article class="kpi-card">
+            <span>Expected money out</span>
+            <strong id="forecastMoneyOut">$0</strong>
+            <small id="forecastMoneyOutLabel">No upcoming bills</small>
+          </article>
+          <article class="kpi-card">
+            <span>Expected saved / invested</span>
+            <strong id="forecastSaved">$0</strong>
+            <small id="forecastSavedLabel">No upcoming savings</small>
+          </article>
+          <article id="forecastBalanceCard" class="kpi-card">
+            <span>Expected balance</span>
+            <strong id="forecastBalance">$0</strong>
+            <small id="forecastBalanceLabel">Money in minus out and saved</small>
+          </article>
+        </div>
+
+        <div class="upcoming-layout">
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Calendar</p>
+                <h2>Expected payments</h2>
+              </div>
+              <span id="occurrenceCountBadge" class="badge">0 items</span>
+            </div>
+            <div id="upcomingOccurrenceList" class="upcoming-occurrence-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Automation</p>
+                <h2>Recurring items</h2>
+              </div>
+              <span id="recurringCountBadge" class="badge">0 active</span>
+            </div>
+            <div id="recurringScheduleList" class="recurring-schedule-list"></div>
+          </section>
+        </div>
+      </section>
     </main>
 
     <div id="entryModal" class="modal-layer" aria-hidden="true">
@@ -246,6 +320,66 @@
       </section>
     </div>
 
-    <script src="app.js?v=20260608-saved-variance" type="module"></script>
+    <div id="recurringModal" class="modal-layer" aria-hidden="true">
+      <div class="modal-backdrop" data-close-recurring-modal></div>
+      <section class="entry-modal recurring-modal" role="dialog" aria-modal="true" aria-labelledby="recurringModalTitle">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">Expected cash flow</p>
+            <h2 id="recurringModalTitle">Add recurring item</h2>
+          </div>
+          <button id="closeRecurringButton" class="icon-button" type="button" aria-label="Close recurring item">&times;</button>
+        </div>
+        <form id="recurringForm" class="recurring-form">
+          <input id="recurringIdInput" type="hidden" />
+          <label class="recurring-name-field">
+            Name
+            <input id="recurringNameInput" type="text" placeholder="e.g. Electricity bill" required />
+          </label>
+          <label>
+            Flow
+            <select id="recurringFlowSelect">
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+              <option value="saving">Savings / Investment</option>
+            </select>
+          </label>
+          <label>
+            Amount
+            <input id="recurringAmountInput" type="text" inputmode="decimal" placeholder="0.00" required />
+          </label>
+          <label>
+            Frequency
+            <select id="recurringFrequencySelect">
+              <option value="weekly">Weekly</option>
+              <option value="fortnightly">Fortnightly</option>
+              <option value="monthly" selected>Monthly</option>
+              <option value="bimonthly">Bi-monthly</option>
+              <option value="quarterly">Quarterly</option>
+              <option value="biannually">Biannually</option>
+              <option value="annually">Annually</option>
+            </select>
+          </label>
+          <label>
+            Next due date
+            <input id="recurringDueDateInput" type="date" required />
+          </label>
+          <label>
+            Bucket
+            <select id="recurringCategorySelect"></select>
+          </label>
+          <label>
+            Subcategory
+            <select id="recurringSubcategorySelect"></select>
+          </label>
+          <div class="edit-actions recurring-form-actions">
+            <button type="submit">Save recurring item</button>
+            <button id="cancelRecurringButton" class="secondary-button" type="button">Cancel</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <script src="app.js?v=20260608-upcoming" type="module"></script>
   </body>
 </html>
