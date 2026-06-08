@@ -122,8 +122,8 @@ h2 {
 
 .view-switch {
   display: inline-grid;
-  grid-template-columns: 1fr 1fr;
-  width: min(360px, 100%);
+  grid-template-columns: repeat(3, 1fr);
+  width: min(520px, 100%);
   padding: 4px;
   border: 1px solid #cfd8ff;
   border-radius: 8px;
@@ -304,13 +304,13 @@ body.modal-open {
 .bulk-entry-rows {
   display: grid;
   gap: 8px;
-  min-width: 960px;
+  min-width: 1160px;
 }
 
 .bulk-entry-header,
 .bulk-entry-row {
   display: grid;
-  grid-template-columns: 140px 120px minmax(150px, 0.8fr) minmax(180px, 1fr) minmax(220px, 1.1fr) 92px;
+  grid-template-columns: 140px 120px minmax(145px, 0.75fr) minmax(170px, 0.95fr) minmax(210px, 1fr) minmax(190px, 0.9fr) 92px;
   align-items: center;
   gap: 8px;
 }
@@ -574,6 +574,76 @@ body.modal-open {
   display: grid;
   grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.7fr);
   gap: 18px;
+}
+
+.net-worth-view {
+  display: grid;
+  gap: 18px;
+}
+
+.net-worth-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.net-worth-list {
+  display: grid;
+  gap: 10px;
+}
+
+.net-worth-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcff;
+}
+
+.net-worth-row.is-liability {
+  border-color: #f0d3d0;
+  background: #fff8f8;
+}
+
+.net-worth-copy {
+  min-width: 0;
+}
+
+.net-worth-copy b {
+  display: block;
+  overflow: hidden;
+  color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.net-worth-copy small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.net-worth-row strong {
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  text-align: right;
+}
+
+.net-worth-row.is-liability strong {
+  color: var(--red);
+}
+
+.net-worth-row button {
+  min-height: 34px;
+  padding: 0 10px;
+  background: var(--blue-soft);
+  color: var(--purple-deep);
+  font-size: 0.74rem;
 }
 
 .upcoming-occurrence-list,
@@ -1069,6 +1139,7 @@ body.modal-open {
   .hero,
   .workbench,
   .upcoming-layout,
+  .net-worth-layout,
   .kpi-grid {
     grid-template-columns: 1fr;
   }
@@ -1098,6 +1169,7 @@ body.modal-open {
   }
 
   .category-row,
+  .net-worth-row,
   .investment-row,
   .investment-stats,
   .report-row,
@@ -1113,6 +1185,10 @@ body.modal-open {
   }
 
   .entry-row strong {
+    text-align: left;
+  }
+
+  .net-worth-row strong {
     text-align: left;
   }
 

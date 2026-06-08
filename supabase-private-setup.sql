@@ -5,6 +5,9 @@ alter table public.finance_entries
   add column if not exists entry_type text not null default 'expense';
 
 alter table public.finance_entries
+  add column if not exists linked_account_id text;
+
+alter table public.finance_entries
   drop constraint if exists finance_entries_entry_type_check;
 
 alter table public.finance_entries
@@ -32,6 +35,18 @@ create table if not exists public.finance_recurring_items (
   occurrence_limit integer check (occurrence_limit is null or occurrence_limit > 0),
   category text not null,
   subcategory text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists public.finance_net_worth_items (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  kind text not null check (kind in ('asset', 'liability')),
+  group_name text not null,
+  subtype text not null,
+  name text not null,
+  base_value numeric not null default 0 check (base_value >= 0),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -65,10 +80,14 @@ create index if not exists finance_plan_overrides_user_id_idx
 create index if not exists finance_recurring_items_user_id_idx
   on public.finance_recurring_items (user_id);
 
+create index if not exists finance_net_worth_items_user_id_idx
+  on public.finance_net_worth_items (user_id);
+
 alter table public.finance_entries enable row level security;
 alter table public.finance_plan_overrides enable row level security;
 alter table public.finance_plan_data enable row level security;
 alter table public.finance_recurring_items enable row level security;
+alter table public.finance_net_worth_items enable row level security;
 
 drop policy if exists "Prototype can read entries" on public.finance_entries;
 drop policy if exists "Prototype can insert entries" on public.finance_entries;
@@ -181,5 +200,31 @@ create policy "Private users can update recurring items"
 
 create policy "Private users can delete recurring items"
   on public.finance_recurring_items for delete
+  to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists "Private users can read net worth items" on public.finance_net_worth_items;
+drop policy if exists "Private users can insert net worth items" on public.finance_net_worth_items;
+drop policy if exists "Private users can update net worth items" on public.finance_net_worth_items;
+drop policy if exists "Private users can delete net worth items" on public.finance_net_worth_items;
+
+create policy "Private users can read net worth items"
+  on public.finance_net_worth_items for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+create policy "Private users can insert net worth items"
+  on public.finance_net_worth_items for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+create policy "Private users can update net worth items"
+  on public.finance_net_worth_items for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Private users can delete net worth items"
+  on public.finance_net_worth_items for delete
   to authenticated
   using (auth.uid() = user_id);

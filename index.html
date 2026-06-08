@@ -74,6 +74,10 @@
             Subcategory
             <select id="subcategorySelect"></select>
           </label>
+          <label>
+            Linked account
+            <select id="accountSelect"></select>
+          </label>
           <button id="saveButton" type="button">Add amount</button>
           <button id="viewEntriesButton" class="secondary-button" type="button">See list of entries</button>
           <button id="bulkEntriesButton" class="secondary-button" type="button">Bulk entries</button>
@@ -86,6 +90,7 @@
       <nav id="appViewSwitch" class="view-switch" aria-label="Finance views" hidden>
         <button class="view-switch-button is-active" type="button" data-app-view="dashboard">Dashboard</button>
         <button class="view-switch-button" type="button" data-app-view="upcoming">Upcoming</button>
+        <button class="view-switch-button" type="button" data-app-view="netWorth">Net Worth</button>
       </nav>
 
       <section id="dashboardSummary" class="kpi-grid" aria-label="Weekly summary" hidden>
@@ -257,6 +262,62 @@
           </section>
         </div>
       </section>
+
+      <section id="netWorthView" class="net-worth-view" hidden>
+        <div class="upcoming-toolbar">
+          <div>
+            <p class="eyebrow">Assets and liabilities</p>
+            <h2>Net Worth</h2>
+          </div>
+          <button id="addNetWorthButton" type="button">Add asset / liability</button>
+        </div>
+
+        <div class="forecast-kpis">
+          <article id="netWorthBalanceCard" class="kpi-card primary">
+            <span>Net worth</span>
+            <strong id="netWorthBalance">$0</strong>
+            <small>Assets minus liabilities</small>
+          </article>
+          <article class="kpi-card">
+            <span>Total assets</span>
+            <strong id="totalAssetsValue">$0</strong>
+            <small id="totalAssetsLabel">No assets yet</small>
+          </article>
+          <article class="kpi-card">
+            <span>Total liabilities</span>
+            <strong id="totalLiabilitiesValue">$0</strong>
+            <small id="totalLiabilitiesLabel">No liabilities yet</small>
+          </article>
+          <article class="kpi-card">
+            <span>Linked movements</span>
+            <strong id="linkedAccountValue">$0</strong>
+            <small>Entry adjustments to accounts</small>
+          </article>
+        </div>
+
+        <div class="net-worth-layout">
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">What you own</p>
+                <h2>Assets</h2>
+              </div>
+              <span id="assetCountBadge" class="badge">0 assets</span>
+            </div>
+            <div id="assetList" class="net-worth-list"></div>
+          </section>
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">What you owe</p>
+                <h2>Liabilities</h2>
+              </div>
+              <span id="liabilityCountBadge" class="badge">0 liabilities</span>
+            </div>
+            <div id="liabilityList" class="net-worth-list"></div>
+          </section>
+        </div>
+      </section>
     </main>
 
     <div id="entryModal" class="modal-layer" aria-hidden="true">
@@ -392,6 +453,49 @@
       </section>
     </div>
 
-    <script src="app.js?v=20260608-recurring-limits" type="module"></script>
+    <div id="netWorthModal" class="modal-layer" aria-hidden="true">
+      <div class="modal-backdrop" data-close-net-worth-modal></div>
+      <section class="entry-modal recurring-modal" role="dialog" aria-modal="true" aria-labelledby="netWorthModalTitle">
+        <div class="modal-heading">
+          <div>
+            <p class="eyebrow">Net worth item</p>
+            <h2 id="netWorthModalTitle">Add asset / liability</h2>
+          </div>
+          <button id="closeNetWorthButton" class="icon-button" type="button" aria-label="Close net worth item">&times;</button>
+        </div>
+        <form id="netWorthForm" class="recurring-form">
+          <input id="netWorthIdInput" type="hidden" />
+          <label>
+            Type
+            <select id="netWorthKindSelect">
+              <option value="asset">Asset</option>
+              <option value="liability">Liability</option>
+            </select>
+          </label>
+          <label>
+            Category
+            <select id="netWorthGroupSelect"></select>
+          </label>
+          <label>
+            Subcategory
+            <select id="netWorthSubtypeSelect"></select>
+          </label>
+          <label class="recurring-name-field">
+            Name
+            <input id="netWorthNameInput" type="text" placeholder="e.g. Vanguard account" required />
+          </label>
+          <label>
+            Current value
+            <input id="netWorthValueInput" type="text" inputmode="decimal" placeholder="0.00" required />
+          </label>
+          <div class="edit-actions recurring-form-actions">
+            <button type="submit">Save item</button>
+            <button id="cancelNetWorthButton" class="secondary-button" type="button">Cancel</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <script src="app.js?v=20260608-net-worth" type="module"></script>
   </body>
 </html>

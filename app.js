@@ -17,8 +17,10 @@ const ENTRIES_TABLE = "finance_entries";
 const PLAN_OVERRIDES_TABLE = "finance_plan_overrides";
 const PLAN_DATA_TABLE = "finance_plan_data";
 const RECURRING_TABLE = "finance_recurring_items";
+const NET_WORTH_TABLE = "finance_net_worth_items";
 const STORAGE_KEY = "finance-tracker-dated-entries:v2";
 const RECURRING_STORAGE_KEY = "finance-tracker-recurring-items:v1";
+const NET_WORTH_STORAGE_KEY = "finance-tracker-net-worth-items:v1";
 const LEGACY_STORAGE_KEY = "weekly-finance-tracker:v1";
 const PLAN_STORAGE_KEY = "finance-tracker-plan-overrides:v2";
 const HISTORICAL_SEED_KEY = "finance-tracker-historical-actuals:v2";
@@ -37,6 +39,20 @@ const RECURRING_FLOWS = {
   expense: "Expense",
   income: "Income",
   saving: "Savings / Investment",
+};
+const NET_WORTH_TAXONOMY = {
+  asset: {
+    "Accounts & funds": ["Investment saving", "Managed funds", "Pension account", "Savings account", "Term deposit"],
+    Property: ["Residential", "Commercial", "Industrial", "Rural"],
+    Vehicles: ["Car", "Bike", "Boat"],
+    "Other assets": ["Business equity", "Cash", "Collections", "Home content", "Life insurance", "Shares", "Stock & machinery", "Tools of trade"],
+  },
+  liability: {
+    "Business debt": ["Business loan", "Commercial bill", "Term loan", "Margin loan"],
+    "Personal credit": ["Credit card", "Store card", "Personal loan", "Line of credit", "Overdraft"],
+    "Asset-backed debt": ["Hire purchase", "Lease"],
+    "Government & contingent": ["HECS", "Tax debt", "Contingent liability"],
+  },
 };
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -61,6 +77,7 @@ const els = {
   dashboardSummary: document.querySelector("#dashboardSummary"),
   dashboardWorkbench: document.querySelector("#dashboardWorkbench"),
   upcomingView: document.querySelector("#upcomingView"),
+  netWorthView: document.querySelector("#netWorthView"),
   forecastHorizonSelect: document.querySelector("#forecastHorizonSelect"),
   addRecurringButton: document.querySelector("#addRecurringButton"),
   forecastMoneyIn: document.querySelector("#forecastMoneyIn"),
@@ -76,6 +93,18 @@ const els = {
   upcomingOccurrenceList: document.querySelector("#upcomingOccurrenceList"),
   recurringCountBadge: document.querySelector("#recurringCountBadge"),
   recurringScheduleList: document.querySelector("#recurringScheduleList"),
+  addNetWorthButton: document.querySelector("#addNetWorthButton"),
+  netWorthBalanceCard: document.querySelector("#netWorthBalanceCard"),
+  netWorthBalance: document.querySelector("#netWorthBalance"),
+  totalAssetsValue: document.querySelector("#totalAssetsValue"),
+  totalAssetsLabel: document.querySelector("#totalAssetsLabel"),
+  totalLiabilitiesValue: document.querySelector("#totalLiabilitiesValue"),
+  totalLiabilitiesLabel: document.querySelector("#totalLiabilitiesLabel"),
+  linkedAccountValue: document.querySelector("#linkedAccountValue"),
+  assetCountBadge: document.querySelector("#assetCountBadge"),
+  liabilityCountBadge: document.querySelector("#liabilityCountBadge"),
+  assetList: document.querySelector("#assetList"),
+  liabilityList: document.querySelector("#liabilityList"),
   periodModeSelect: document.querySelector("#periodModeSelect"),
   periodSelect: document.querySelector("#periodSelect"),
   entryDateInput: document.querySelector("#entryDateInput"),
@@ -83,6 +112,7 @@ const els = {
   entryTypeSelect: document.querySelector("#entryTypeSelect"),
   categorySelect: document.querySelector("#categorySelect"),
   subcategorySelect: document.querySelector("#subcategorySelect"),
+  accountSelect: document.querySelector("#accountSelect"),
   saveButton: document.querySelector("#saveButton"),
   viewEntriesButton: document.querySelector("#viewEntriesButton"),
   bulkEntriesButton: document.querySelector("#bulkEntriesButton"),
@@ -119,6 +149,17 @@ const els = {
   recurringSubcategorySelect: document.querySelector("#recurringSubcategorySelect"),
   closeRecurringButton: document.querySelector("#closeRecurringButton"),
   cancelRecurringButton: document.querySelector("#cancelRecurringButton"),
+  netWorthModal: document.querySelector("#netWorthModal"),
+  netWorthForm: document.querySelector("#netWorthForm"),
+  netWorthModalTitle: document.querySelector("#netWorthModalTitle"),
+  netWorthIdInput: document.querySelector("#netWorthIdInput"),
+  netWorthKindSelect: document.querySelector("#netWorthKindSelect"),
+  netWorthGroupSelect: document.querySelector("#netWorthGroupSelect"),
+  netWorthSubtypeSelect: document.querySelector("#netWorthSubtypeSelect"),
+  netWorthNameInput: document.querySelector("#netWorthNameInput"),
+  netWorthValueInput: document.querySelector("#netWorthValueInput"),
+  closeNetWorthButton: document.querySelector("#closeNetWorthButton"),
+  cancelNetWorthButton: document.querySelector("#cancelNetWorthButton"),
   targetTitle: document.querySelector("#targetTitle"),
   weeklyTarget: document.querySelector("#weeklyTarget"),
   targetBasis: document.querySelector("#targetBasis"),
@@ -156,6 +197,7 @@ let financeData;
 let periods = [];
 let entries = loadEntries();
 let recurringItems = loadRecurringItems();
+let netWorthItems = loadNetWorthItems();
 let planOverrides = loadPlanOverrides();
 let currentUser = null;
 let dashboardReady = false;
@@ -210,6 +252,12 @@ function setupTrackerListeners() {
     populateSubcategorySelect(els.recurringSubcategorySelect, els.recurringCategorySelect.value);
   });
   els.recurringForm.addEventListener("submit", saveRecurringItem);
+  els.addNetWorthButton.addEventListener("click", () => openNetWorthModal());
+  els.closeNetWorthButton.addEventListener("click", closeNetWorthModal);
+  els.cancelNetWorthButton.addEventListener("click", closeNetWorthModal);
+  els.netWorthKindSelect.addEventListener("change", populateNetWorthGroupOptions);
+  els.netWorthGroupSelect.addEventListener("change", populateNetWorthSubtypeOptions);
+  els.netWorthForm.addEventListener("submit", saveNetWorthItem);
   els.entryModal.addEventListener("click", (event) => {
     if (event.target.matches("[data-close-modal]")) closeEntryModal();
   });
@@ -222,12 +270,16 @@ function setupTrackerListeners() {
   els.recurringModal.addEventListener("click", (event) => {
     if (event.target.matches("[data-close-recurring-modal]")) closeRecurringModal();
   });
+  els.netWorthModal.addEventListener("click", (event) => {
+    if (event.target.matches("[data-close-net-worth-modal]")) closeNetWorthModal();
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeEntryModal();
       closeBulkModal();
       closePlanModal();
       closeRecurringModal();
+      closeNetWorthModal();
     }
   });
 }
@@ -285,6 +337,7 @@ function setupAuthListeners() {
       closeBulkModal();
       closePlanModal();
       closeRecurringModal();
+      closeNetWorthModal();
     }
   });
 }
@@ -381,6 +434,8 @@ async function initializeDashboard() {
   populateCategoryOptions();
   populatePlanOptions();
   populateRecurringCategoryOptions();
+  populateNetWorthFormOptions();
+  populateAccountOptions();
   els.entryDateInput.value = getDefaultEntryDateKey();
   els.recurringDueDateInput.value = els.entryDateInput.value;
   populatePeriodOptions(els.entryDateInput.value);
@@ -396,6 +451,7 @@ function updateDashboardVisibility() {
   els.dashboardSummary.hidden = !canShowDashboard || activeAppView !== "dashboard";
   els.dashboardWorkbench.hidden = !canShowDashboard || activeAppView !== "dashboard";
   els.upcomingView.hidden = !canShowDashboard || activeAppView !== "upcoming";
+  els.netWorthView.hidden = !canShowDashboard || activeAppView !== "netWorth";
 }
 
 function render() {
@@ -442,11 +498,12 @@ function render() {
   renderMiniTable(period);
   renderInvestments(period, periodEntries);
   renderUpcoming();
+  renderNetWorth();
   updateLiveVariance();
 }
 
 function setAppView(view) {
-  activeAppView = view === "upcoming" ? "upcoming" : "dashboard";
+  activeAppView = ["upcoming", "netWorth"].includes(view) ? view : "dashboard";
   els.viewSwitchButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.appView === activeAppView);
   });
@@ -468,6 +525,7 @@ function saveEntry() {
     date: els.entryDateInput.value,
     category: els.categorySelect.value,
     subcategory: els.subcategorySelect.value,
+    accountId: els.accountSelect.value,
     createdAt: new Date().toISOString(),
   });
   saveEntries();
@@ -558,6 +616,7 @@ function createPeriodEntryContext(periodEntries = null) {
       type: els.entryTypeSelect.value,
       category: els.categorySelect.value,
       subcategory: els.subcategorySelect.value,
+      accountId: els.accountSelect.value,
     }),
   };
 }
@@ -629,6 +688,10 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
       Subcategory
       <select name="subcategory"></select>
     </label>
+    <label>
+      Linked account
+      <select name="accountId"></select>
+    </label>
     <div class="edit-actions">
       <button type="submit">Save changes</button>
       <button class="secondary-button" type="button" data-cancel-edit>Cancel</button>
@@ -638,9 +701,11 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
   const typeSelect = form.elements.type;
   const categorySelect = form.elements.category;
   const subcategorySelect = form.elements.subcategory;
+  const accountSelect = form.elements.accountId;
   populateEntryTypeSelect(typeSelect, getEntryType(entry) || defaults.type);
   populateCategorySelect(categorySelect, entry?.category || defaults.category);
   populateSubcategorySelect(subcategorySelect, categorySelect.value, entry?.subcategory || defaults.subcategory);
+  populateAccountSelect(accountSelect, entry?.accountId || defaults.accountId);
 
   categorySelect.addEventListener("change", () => {
     populateSubcategorySelect(subcategorySelect, categorySelect.value);
@@ -663,6 +728,7 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
               type: typeSelect.value,
               category: categorySelect.value,
               subcategory: subcategorySelect.value,
+              accountId: accountSelect.value,
               updatedAt: new Date().toISOString(),
             }
           : item,
@@ -675,6 +741,7 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
         date: form.elements.date.value,
         category: categorySelect.value,
         subcategory: subcategorySelect.value,
+        accountId: accountSelect.value,
         createdAt: new Date().toISOString(),
       });
     }
@@ -722,6 +789,7 @@ function renderBulkEntries() {
     <span>Type</span>
     <span>Bucket</span>
     <span>Subcategory</span>
+    <span>Account</span>
     <span></span>
   `;
   els.bulkEntryRows.append(header);
@@ -741,15 +809,18 @@ function addBulkRow(entry = null) {
     <select class="bulk-type"></select>
     <select class="bulk-category"></select>
     <select class="bulk-subcategory"></select>
+    <select class="bulk-account"></select>
     <button class="secondary-button bulk-remove-button" type="button">Remove</button>
   `;
 
   const typeSelect = row.querySelector(".bulk-type");
   const categorySelect = row.querySelector(".bulk-category");
   const subcategorySelect = row.querySelector(".bulk-subcategory");
+  const accountSelect = row.querySelector(".bulk-account");
   populateEntryTypeSelect(typeSelect, getEntryType(entry) || els.entryTypeSelect.value);
   populateCategorySelect(categorySelect, entry?.category || els.categorySelect.value);
   populateSubcategorySelect(subcategorySelect, categorySelect.value, entry?.subcategory || els.subcategorySelect.value);
+  populateAccountSelect(accountSelect, entry?.accountId || "");
   categorySelect.addEventListener("change", () => populateSubcategorySelect(subcategorySelect, categorySelect.value));
   row.querySelector(".bulk-remove-button").addEventListener("click", () => {
     if (row.dataset.entryId) deletedBulkEntryIds.add(row.dataset.entryId);
@@ -772,6 +843,7 @@ function saveBulkEntries() {
     const type = row.querySelector(".bulk-type").value;
     const category = row.querySelector(".bulk-category").value;
     const subcategory = row.querySelector(".bulk-subcategory").value;
+    const accountId = row.querySelector(".bulk-account").value;
     const id = row.dataset.entryId;
 
     if (!date || !Number.isFinite(amount) || amount <= 0) return;
@@ -784,6 +856,7 @@ function saveBulkEntries() {
         type,
         category,
         subcategory,
+        accountId,
         updatedAt: now,
       });
       return;
@@ -797,6 +870,7 @@ function saveBulkEntries() {
       type,
       category,
       subcategory,
+      accountId,
       createdAt: now,
     });
   });
@@ -863,6 +937,66 @@ function closeRecurringModal() {
   document.body.classList.remove("modal-open");
   els.recurringForm.reset();
   els.recurringIdInput.value = "";
+}
+
+function openNetWorthModal(item = null) {
+  els.netWorthModalTitle.textContent = item ? "Edit net worth item" : "Add asset / liability";
+  els.netWorthIdInput.value = item?.id || "";
+  els.netWorthKindSelect.value = item?.kind || "asset";
+  populateNetWorthGroupOptions(item?.groupName);
+  populateNetWorthSubtypeOptions(item?.subtype);
+  els.netWorthNameInput.value = item?.name || "";
+  els.netWorthValueInput.value = item?.baseValue ?? "";
+  els.netWorthModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  els.netWorthNameInput.focus();
+}
+
+function closeNetWorthModal() {
+  els.netWorthModal.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+  els.netWorthForm.reset();
+  els.netWorthIdInput.value = "";
+}
+
+function saveNetWorthItem(event) {
+  event.preventDefault();
+  const baseValue = parseAmount(els.netWorthValueInput.value);
+  if (!Number.isFinite(baseValue) || baseValue < 0) {
+    els.netWorthValueInput.focus();
+    return;
+  }
+  const now = new Date().toISOString();
+  const id = els.netWorthIdInput.value || crypto.randomUUID();
+  const item = {
+    id,
+    kind: els.netWorthKindSelect.value,
+    groupName: els.netWorthGroupSelect.value,
+    subtype: els.netWorthSubtypeSelect.value,
+    name: els.netWorthNameInput.value.trim(),
+    baseValue,
+    createdAt: netWorthItems.find((current) => current.id === id)?.createdAt || now,
+    updatedAt: now,
+  };
+  if (!item.name) return;
+  netWorthItems = netWorthItems.some((current) => current.id === id)
+    ? netWorthItems.map((current) => (current.id === id ? item : current))
+    : [...netWorthItems, item];
+  saveNetWorthItems();
+  populateAccountOptions();
+  closeNetWorthModal();
+  renderNetWorth();
+}
+
+function removeNetWorthItem(id) {
+  netWorthItems = netWorthItems.filter((item) => item.id !== id);
+  entries = entries.map((entry) => (entry.accountId === id ? { ...entry, accountId: "" } : entry));
+  saveNetWorthItems();
+  saveEntries();
+  deleteSupabaseNetWorthItem(id);
+  populateAccountOptions();
+  renderNetWorth();
+  render();
 }
 
 function saveRecurringItem(event) {
@@ -1054,6 +1188,93 @@ function renderRecurringItems() {
   });
 }
 
+function renderNetWorth() {
+  if (!financeData || !els.assetList) return;
+  const balances = getNetWorthBalances();
+  const assets = balances.items.filter((item) => item.kind === "asset");
+  const liabilities = balances.items.filter((item) => item.kind === "liability");
+  const totalAssets = assets.reduce((sum, item) => sum + item.currentValue, 0);
+  const totalLiabilities = liabilities.reduce((sum, item) => sum + item.currentValue, 0);
+  const linkedTotal = balances.items.reduce((sum, item) => sum + item.adjustment, 0);
+  const netWorth = totalAssets - totalLiabilities;
+
+  els.netWorthBalance.textContent = money(netWorth);
+  els.netWorthBalanceCard.classList.toggle("is-good", netWorth >= 0);
+  els.netWorthBalanceCard.classList.toggle("is-over", netWorth < 0);
+  els.totalAssetsValue.textContent = money(totalAssets);
+  els.totalAssetsLabel.textContent = assets.length ? `${assets.length} ${assets.length === 1 ? "asset" : "assets"}` : "No assets yet";
+  els.totalLiabilitiesValue.textContent = money(totalLiabilities);
+  els.totalLiabilitiesLabel.textContent = liabilities.length
+    ? `${liabilities.length} ${liabilities.length === 1 ? "liability" : "liabilities"}`
+    : "No liabilities yet";
+  els.linkedAccountValue.textContent = money(linkedTotal);
+  els.assetCountBadge.textContent = `${assets.length} ${assets.length === 1 ? "asset" : "assets"}`;
+  els.liabilityCountBadge.textContent = `${liabilities.length} ${liabilities.length === 1 ? "liability" : "liabilities"}`;
+
+  renderNetWorthList(els.assetList, assets, "No assets yet.");
+  renderNetWorthList(els.liabilityList, liabilities, "No liabilities yet.");
+}
+
+function getNetWorthBalances() {
+  const adjustments = getAccountAdjustments();
+  return {
+    items: netWorthItems.map((item) => {
+      const adjustment = item.kind === "asset" ? adjustments[item.id] || 0 : 0;
+      return {
+        ...item,
+        adjustment,
+        currentValue: Number(item.baseValue || 0) + adjustment,
+      };
+    }),
+  };
+}
+
+function getAccountAdjustments() {
+  return entries.reduce((totals, entry) => {
+    if (!entry.accountId) return totals;
+    const adjustment = getLinkedAccountAdjustment(entry);
+    if (!adjustment) return totals;
+    totals[entry.accountId] = (totals[entry.accountId] || 0) + adjustment;
+    return totals;
+  }, {});
+}
+
+function getLinkedAccountAdjustment(entry) {
+  if (getEntryType(entry) === "reserve") return -Number(entry.amount || 0);
+  if (entry.category === INVESTMENT_SECTION) return Number(entry.amount || 0);
+  return 0;
+}
+
+function renderNetWorthList(container, items, emptyText) {
+  container.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-entries";
+    empty.textContent = emptyText;
+    container.append(empty);
+    return;
+  }
+  items
+    .slice()
+    .sort((a, b) => b.currentValue - a.currentValue)
+    .forEach((item) => {
+      const row = document.createElement("div");
+      row.className = `net-worth-row is-${item.kind}`;
+      row.innerHTML = `
+        <span class="net-worth-copy">
+          <b>${escapeHtml(item.name)}</b>
+          <small>${item.groupName} · ${item.subtype}${item.adjustment ? ` · ${money(item.adjustment)} linked` : ""}</small>
+        </span>
+        <strong>${money(item.currentValue)}</strong>
+        <button type="button" data-edit-net-worth="${item.id}">Edit</button>
+        <button type="button" data-delete-net-worth="${item.id}">Delete</button>
+      `;
+      row.querySelector("[data-edit-net-worth]").addEventListener("click", () => openNetWorthModal(item));
+      row.querySelector("[data-delete-net-worth]").addEventListener("click", () => removeNetWorthItem(item.id));
+      container.append(row);
+    });
+}
+
 function getRecurringOccurrences(start, end) {
   return recurringItems
     .flatMap((item) => expandRecurringItem(item, start, end))
@@ -1172,6 +1393,60 @@ function syncRecurringFlowDefaults() {
   const category = getRecurringDefaultCategory(els.recurringFlowSelect.value);
   populateCategorySelect(els.recurringCategorySelect, category);
   populateSubcategorySelect(els.recurringSubcategorySelect, category);
+}
+
+function populateNetWorthFormOptions() {
+  populateNetWorthGroupOptions();
+}
+
+function populateNetWorthGroupOptions(selectedValue = "") {
+  const groups = Object.keys(NET_WORTH_TAXONOMY[els.netWorthKindSelect.value] || {});
+  els.netWorthGroupSelect.replaceChildren();
+  groups.forEach((group) => {
+    const option = document.createElement("option");
+    option.value = group;
+    option.textContent = group;
+    els.netWorthGroupSelect.append(option);
+  });
+  if (selectedValue && groups.includes(selectedValue)) els.netWorthGroupSelect.value = selectedValue;
+  populateNetWorthSubtypeOptions();
+}
+
+function populateNetWorthSubtypeOptions(selectedValue = "") {
+  const subtypes = NET_WORTH_TAXONOMY[els.netWorthKindSelect.value]?.[els.netWorthGroupSelect.value] || [];
+  els.netWorthSubtypeSelect.replaceChildren();
+  subtypes.forEach((subtype) => {
+    const option = document.createElement("option");
+    option.value = subtype;
+    option.textContent = subtype;
+    els.netWorthSubtypeSelect.append(option);
+  });
+  if (selectedValue && subtypes.includes(selectedValue)) els.netWorthSubtypeSelect.value = selectedValue;
+}
+
+function populateAccountOptions() {
+  populateAccountSelect(els.accountSelect);
+}
+
+function populateAccountSelect(select, selectedValue = "") {
+  select.replaceChildren();
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "No linked account";
+  select.append(none);
+  getLinkableAccounts().forEach((item) => {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.name;
+    select.append(option);
+  });
+  if (selectedValue) select.value = selectedValue;
+}
+
+function getLinkableAccounts() {
+  return netWorthItems
+    .filter((item) => item.kind === "asset")
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function getRecurringDefaultCategory(flow) {
@@ -1838,6 +2113,7 @@ async function hydrateFromSupabase() {
     localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(planOverrides));
     await Promise.all([pushEntriesToSupabase(), pushPlanOverridesToSupabase()]);
     await hydrateRecurringItemsFromSupabase();
+    await hydrateNetWorthItemsFromSupabase();
     setSyncStatus("Supabase sync on", "online");
   } catch (error) {
     console.warn("Supabase sync is not ready yet.", error);
@@ -1893,6 +2169,7 @@ function toSupabaseEntry(entry) {
     entry_date: entry.date,
     category: entry.category,
     subcategory: entry.subcategory || null,
+    linked_account_id: entry.accountId ? toSupabaseKey(entry.accountId) : null,
     source: entry.source || null,
     created_at: entry.createdAt || new Date().toISOString(),
     updated_at: entry.updatedAt || entry.createdAt || new Date().toISOString(),
@@ -1907,6 +2184,7 @@ function fromSupabaseEntry(row) {
     date: row.entry_date,
     category: row.category,
     subcategory: row.subcategory || "",
+    accountId: row.linked_account_id ? fromSupabaseKey(row.linked_account_id) : "",
     source: row.source || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -1998,6 +2276,87 @@ function fromSupabaseRecurringItem(row) {
     occurrenceLimit: row.occurrence_limit || null,
     category: row.category,
     subcategory: row.subcategory || "",
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function hydrateNetWorthItemsFromSupabase() {
+  try {
+    const { data, error } = await supabase
+      .from(NET_WORTH_TABLE)
+      .select("*")
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+    netWorthItems = mergeNetWorthItems(netWorthItems, (data || []).map(fromSupabaseNetWorthItem));
+    localStorage.setItem(NET_WORTH_STORAGE_KEY, JSON.stringify(netWorthItems));
+    await pushNetWorthItemsToSupabase();
+  } catch (error) {
+    console.warn("Net worth sync is not ready yet.", error);
+  }
+}
+
+function mergeNetWorthItems(localItems, remoteItems) {
+  const merged = new Map();
+  remoteItems.forEach((item) => merged.set(item.id, item));
+  localItems.forEach((item) => merged.set(item.id, item));
+  return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function saveNetWorthItems() {
+  localStorage.setItem(NET_WORTH_STORAGE_KEY, JSON.stringify(netWorthItems));
+  pushNetWorthItemsToSupabase().catch((error) => {
+    console.warn("Net worth sync failed.", error);
+    setSyncStatus("Net worth saved locally - run Supabase setup", "warning");
+  });
+}
+
+async function pushNetWorthItemsToSupabase() {
+  if (!currentUser || !netWorthItems.length) return;
+  const { error } = await supabase
+    .from(NET_WORTH_TABLE)
+    .upsert(netWorthItems.map(toSupabaseNetWorthItem), { onConflict: "id" });
+  if (error) throw error;
+  setSyncStatus("Supabase sync on", "online");
+}
+
+async function deleteSupabaseNetWorthItem(id) {
+  if (!currentUser) return;
+  const { error } = await supabase
+    .from(NET_WORTH_TABLE)
+    .delete()
+    .eq("id", toSupabaseKey(id))
+    .eq("user_id", currentUser.id);
+  if (error) {
+    console.warn("Net worth delete sync failed.", error);
+    setSyncStatus("Net worth deleted locally - run Supabase setup", "warning");
+    return;
+  }
+  setSyncStatus("Supabase sync on", "online");
+}
+
+function toSupabaseNetWorthItem(item) {
+  return {
+    id: toSupabaseKey(item.id),
+    user_id: currentUser.id,
+    kind: item.kind,
+    group_name: item.groupName,
+    subtype: item.subtype,
+    name: item.name,
+    base_value: Number(item.baseValue || 0),
+    created_at: item.createdAt || new Date().toISOString(),
+    updated_at: item.updatedAt || item.createdAt || new Date().toISOString(),
+  };
+}
+
+function fromSupabaseNetWorthItem(row) {
+  return {
+    id: fromSupabaseKey(row.id),
+    kind: row.kind,
+    groupName: row.group_name,
+    subtype: row.subtype,
+    name: row.name,
+    baseValue: Number(row.base_value || 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -2111,6 +2470,15 @@ function loadPlanOverrides() {
 function loadRecurringItems() {
   try {
     const stored = JSON.parse(localStorage.getItem(RECURRING_STORAGE_KEY) || "[]");
+    return Array.isArray(stored) ? stored : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadNetWorthItems() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(NET_WORTH_STORAGE_KEY) || "[]");
     return Array.isArray(stored) ? stored : [];
   } catch {
     return [];
