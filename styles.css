@@ -454,8 +454,64 @@ body.modal-open {
 
 .plan-controls {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
+}
+
+.budget-target-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.budget-target-summary > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8faff;
+}
+
+.budget-target-summary span,
+.budget-target-metrics small,
+.budget-target-input {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.budget-target-summary strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.budget-target-summary .is-over strong,
+.budget-target-metrics .is-over strong {
+  color: var(--red);
+}
+
+.budget-target-summary .is-good strong,
+.budget-target-metrics .is-good strong {
+  color: var(--green);
+}
+
+.pay-cycle-month-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pay-cycle-month-actions span {
+  margin-right: auto;
+}
+
+.pay-cycle-month-actions button {
+  min-height: 38px;
+  padding: 0 12px;
 }
 
 .plan-editor-list {
@@ -467,13 +523,57 @@ body.modal-open {
 
 .plan-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 150px;
+  grid-template-columns: minmax(170px, 0.8fr) minmax(360px, 1.4fr) 150px;
   align-items: center;
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfa;
+}
+
+.budget-target-row.is-over {
+  border-color: #efb8b1;
+  background: #fff8f7;
+}
+
+.budget-target-row.is-readonly {
+  grid-template-columns: minmax(180px, 0.8fr) minmax(420px, 1.7fr);
+}
+
+.budget-target-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(72px, 1fr));
+  gap: 8px;
+}
+
+.budget-target-metrics span {
+  min-width: 0;
+}
+
+.budget-target-metrics small {
+  display: block;
+  margin: 0;
+}
+
+.budget-target-metrics strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink);
+  font-size: 0.85rem;
+}
+
+.budget-target-input {
+  display: grid;
+  gap: 4px;
+}
+
+.budget-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--red);
+  font-size: 0.76rem;
+  font-weight: 800;
 }
 
 .plan-row.has-override {
@@ -490,6 +590,40 @@ body.modal-open {
   display: block;
   margin-top: 3px;
   color: var(--muted);
+}
+
+.category-budget-values {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.category-budget-values span {
+  display: grid;
+  gap: 2px;
+}
+
+.category-budget-values small,
+.category-row .money small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.category-budget-values strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+}
+
+.category-budget-values .is-over strong,
+.category-row.is-projected-over .money {
+  color: var(--red);
+}
+
+.category-budget-values .is-good strong {
+  color: var(--green);
 }
 
 .edit-actions {
@@ -533,7 +667,9 @@ body.modal-open {
 }
 
 .plan-modal {
+  width: min(1100px, 100%);
   max-height: min(84vh, 760px);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
 }
 
 .modal-heading {
@@ -1380,6 +1516,27 @@ body.modal-open {
   .plan-row,
   .edit-actions {
     grid-template-columns: 1fr;
+  }
+
+  .budget-target-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .budget-target-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .budget-target-row.is-readonly {
+    grid-template-columns: 1fr;
+  }
+
+  .pay-cycle-month-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pay-cycle-month-actions button {
+    width: 100%;
   }
 
   .money {

@@ -156,9 +156,12 @@ const els = {
   saveImportButton: document.querySelector("#saveImportButton"),
   planModal: document.querySelector("#planModal"),
   closePlanButton: document.querySelector("#closePlanButton"),
+  planPeriodModeSelect: document.querySelector("#planPeriodModeSelect"),
   planMonthSelect: document.querySelector("#planMonthSelect"),
   planSectionSelect: document.querySelector("#planSectionSelect"),
+  planEditorSummary: document.querySelector("#planEditorSummary"),
   planEditorList: document.querySelector("#planEditorList"),
+  planEditActions: document.querySelector("#planEditActions"),
   savePlanButton: document.querySelector("#savePlanButton"),
   resetPlanButton: document.querySelector("#resetPlanButton"),
   recurringModal: document.querySelector("#recurringModal"),
@@ -299,6 +302,11 @@ function setupTrackerListeners() {
   els.csvFileInput.addEventListener("change", handleCsvFile);
   els.clearImportButton.addEventListener("click", clearImportedCsv);
   els.saveImportButton.addEventListener("click", saveImportedEntries);
+  els.planPeriodModeSelect.addEventListener("change", () => {
+    const preferredDate = parseDate(els.planMonthSelect.selectedOptions[0]?.dataset.start || getDefaultEntryDateKey());
+    populatePlanPeriodOptions(preferredDate);
+    renderPlanEditor();
+  });
   els.planMonthSelect.addEventListener("change", renderPlanEditor);
   els.planSectionSelect.addEventListener("change", renderPlanEditor);
   els.savePlanButton.addEventListener("click", savePlanEditor);
@@ -1126,8 +1134,8 @@ function closeEntryModal() {
 
 function openPlanModal() {
   const period = getSelectedPeriod();
-  const selectedMonth = getMonthKeyForDate(period.start);
-  if (selectedMonth) els.planMonthSelect.value = selectedMonth;
+  els.planPeriodModeSelect.value = period.mode === "payCycle" ? "payCycle" : "month";
+  populatePlanPeriodOptions(period.start);
   renderPlanEditor();
   els.planModal.setAttribute("aria-hidden", "false");
   document.body.classList.add("modal-open");
@@ -1140,7 +1148,7 @@ function closePlanModal() {
 }
 
 function openRecurringModal(item = null) {
-  els.recurringModalTitle.textContent = item ? "Edit recurring item" : "Add recurring item";
+  els.recurringModalTitle.textContent = item ? "Edit forecast item" : "Add forecast item";
   els.recurringIdInput.value = item?.id || "";
   els.recurringNameInput.value = item?.name || "";
   els.recurringAmountInput.value = item?.amount ?? "";
@@ -1432,7 +1440,7 @@ function renderRecurringItems() {
   if (!sortedItems.length) {
     const empty = document.createElement("p");
     empty.className = "empty-entries";
-    empty.textContent = "Create a recurring item to forecast bills, income, or savings.";
+    empty.textContent = "Create a recurring or one-time item to forecast bills, income, or savings.";
     els.recurringScheduleList.append(empty);
     return;
   }
@@ -1771,15 +1779,7 @@ function getRecurringDefaultCategory(flow) {
 }
 
 function populatePlanOptions() {
-  els.planMonthSelect.replaceChildren();
   els.planSectionSelect.replaceChildren();
-
-  financeData.months.forEach((month) => {
-    const option = document.createElement("option");
-    option.value = month.key;
-    option.textContent = month.label;
-    els.planMonthSelect.append(option);
-  });
 
   financeData.sections.forEach((section) => {
     const option = document.createElement("option");
@@ -1787,31 +1787,153 @@ function populatePlanOptions() {
     option.textContent = section.name;
     els.planSectionSelect.append(option);
   });
+  populatePlanPeriodOptions();
+}
+
+function populatePlanPeriodOptions(preferredDate = startOfDay(new Date())) {
+  const mode = els.planPeriodModeSelect.value;
+  const planPeriods = buildPeriods(mode);
+  els.planMonthSelect.replaceChildren();
+  planPeriods.forEach((period) => {
+    const option = document.createElement("option");
+    option.value = period.id;
+    option.textContent = period.label;
+    option.dataset.start = dateKey(period.start);
+    els.planMonthSelect.append(option);
+  });
+  const matchingPeriod = planPeriods.find((period) => preferredDate >= period.start && preferredDate < period.end);
+  if (matchingPeriod) els.planMonthSelect.value = matchingPeriod.id;
+}
+
+function getSelectedPlanPeriod() {
+  return buildPeriods(els.planPeriodModeSelect.value)
+    .find((period) => period.id === els.planMonthSelect.value);
 }
 
 function renderPlanEditor() {
-  const monthKey = els.planMonthSelect.value;
+  const period = getSelectedPlanPeriod();
   const section = getSection(els.planSectionSelect.value);
+  if (!period || !section) return;
+  const isMonthly = period.mode === "month";
   els.planEditorList.replaceChildren();
+  els.planEditorSummary.replaceChildren();
+  els.planEditActions.hidden = !isMonthly;
+
+  const sectionMetrics = getBudgetTargetMetrics(section, null, period);
+  const sectionStatus = getBudgetTargetStatus(section.name, sectionMetrics.remaining);
+  els.planEditorSummary.innerHTML = `
+    <div><span>Period target</span><strong>${money(sectionMetrics.target)}</strong></div>
+    <div><span>Actual</span><strong>${money(sectionMetrics.actual)}</strong></div>
+    <div><span>Upcoming</span><strong>${money(sectionMetrics.upcoming)}</strong></div>
+    <div class="${sectionStatus}">
+      <span>Remaining after upcoming</span>
+      <strong>${formatRemainingMoney(sectionMetrics.remaining)}</strong>
+    </div>
+  `;
+
+  if (!isMonthly) {
+    const monthKeys = getPlanMonthsForRange(period.start, period.end);
+    const editMonths = document.createElement("div");
+    editMonths.className = "pay-cycle-month-actions";
+    const label = document.createElement("span");
+    label.textContent = "Pay-cycle targets are calculated from monthly budgets:";
+    editMonths.append(label);
+    monthKeys.forEach((monthKey) => {
+      const month = financeData.months.find((item) => item.key === monthKey);
+      const button = document.createElement("button");
+      button.className = "secondary-button";
+      button.type = "button";
+      button.textContent = `Edit ${month?.label || monthKey}`;
+      button.addEventListener("click", () => {
+        els.planPeriodModeSelect.value = "month";
+        populatePlanPeriodOptions(parseDate(`${monthKey}-01`));
+        renderPlanEditor();
+      });
+      editMonths.append(button);
+    });
+    els.planEditorSummary.append(editMonths);
+  }
 
   section.rows.forEach((row) => {
-    const baseValue = row.values[monthKey] ?? 0;
-    const value = getRowValue(row, section.name, monthKey);
-    const hasOverride = hasPlanOverride(section.name, row.name, monthKey);
-    const item = document.createElement("label");
-    item.className = `plan-row ${hasOverride ? "has-override" : ""}`;
+    const metrics = getBudgetTargetMetrics(section, row, period);
+    const status = getBudgetTargetStatus(section.name, metrics.remaining);
+    const isOverBudget = status === "is-over";
+    const monthKey = isMonthly ? period.id : "";
+    const baseValue = isMonthly ? row.values[monthKey] ?? 0 : 0;
+    const value = isMonthly ? getRowValue(row, section.name, monthKey) : metrics.target;
+    const hasOverride = isMonthly && hasPlanOverride(section.name, row.name, monthKey);
+    const item = document.createElement("div");
+    item.className = `plan-row budget-target-row ${hasOverride ? "has-override" : ""} ${isOverBudget ? "is-over" : ""} ${isMonthly ? "" : "is-readonly"}`;
     item.innerHTML = `
-      <span>
+      <span class="budget-target-name">
         <b>${row.name}</b>
-        <small>Spreadsheet: ${money(baseValue)}${hasOverride ? " · edited" : ""}</small>
+        <small>${isMonthly ? `Spreadsheet: ${money(baseValue)}${hasOverride ? " · edited" : ""}` : "Calculated proportionally from monthly targets"}</small>
       </span>
-      <input type="text" inputmode="decimal" value="${formatPlanInput(value)}" data-row-name="${escapeAttribute(row.name)}" />
+      <div class="budget-target-metrics">
+        <span><small>Target</small><strong>${money(metrics.target)}</strong></span>
+        <span><small>Actual</small><strong>${money(metrics.actual)}</strong></span>
+        <span><small>Upcoming</small><strong>${money(metrics.upcoming)}</strong></span>
+        <span class="${status}">
+          <small>Remaining</small><strong>${formatRemainingMoney(metrics.remaining)}</strong>
+        </span>
+      </div>
+      ${isMonthly ? `<label class="budget-target-input">Monthly target<input type="text" inputmode="decimal" value="${formatPlanInput(value)}" data-row-name="${escapeAttribute(row.name)}" /></label>` : ""}
+      ${isOverBudget ? `<p class="budget-warning">${money(Math.abs(metrics.remaining))} over target after upcoming items</p>` : ""}
     `;
     els.planEditorList.append(item);
   });
 }
 
+function getBudgetTargetMetrics(section, row, period) {
+  const target = row
+    ? getRowBudgetForRange(row, period.start, period.end)
+    : getBudgetForRange(period.start, period.end, [section]);
+  const periodEntries = getEntriesForPeriod(period).filter((entry) => {
+    if (entry.category !== section.name) return false;
+    return !row || entry.subcategory === row.name;
+  });
+  const actual = section.name === INCOME_SECTION
+    ? sumEntries(periodEntries)
+    : section.name === INVESTMENT_SECTION
+      ? sumEntries(periodEntries)
+      : sumEntryImpacts(periodEntries);
+  const upcoming = getUnresolvedOccurrencesForRange(period.start, period.end)
+    .filter((item) => {
+      if (item.category !== section.name) return false;
+      if (item.flow !== getTargetFlowForSection(section.name)) return false;
+      return !row || item.subcategory === row.name;
+    })
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  return { target, actual, upcoming, remaining: target - actual - upcoming };
+}
+
+function getTargetFlowForSection(sectionName) {
+  if (sectionName === INCOME_SECTION) return "income";
+  if (sectionName === INVESTMENT_SECTION) return "saving";
+  return "expense";
+}
+
+function getBudgetTargetStatus(sectionName, remaining) {
+  if (isExpenseCategory(sectionName)) return remaining < 0 ? "is-over" : "is-good";
+  return remaining <= 0 ? "is-good" : "";
+}
+
+function getUnresolvedOccurrencesForRange(start, end) {
+  return getRecurringOccurrences(start, end).filter((item) => !isOccurrenceDone(item));
+}
+
+function getPlanMonthsForRange(start, end) {
+  return financeData.months
+    .filter((month) => getOverlapDays(start, end, monthStart(month.key), addMonths(monthStart(month.key), 1)) > 0)
+    .map((month) => month.key);
+}
+
+function formatRemainingMoney(value) {
+  return value < 0 ? `-${money(Math.abs(value))}` : money(value);
+}
+
 function savePlanEditor() {
+  if (els.planPeriodModeSelect.value !== "month") return;
   const monthKey = els.planMonthSelect.value;
   const section = getSection(els.planSectionSelect.value);
   els.planEditorList.querySelectorAll("input[data-row-name]").forEach((input) => {
@@ -1835,6 +1957,7 @@ function savePlanEditor() {
 }
 
 function resetPlanSection() {
+  if (els.planPeriodModeSelect.value !== "month") return;
   const monthKey = els.planMonthSelect.value;
   const section = getSection(els.planSectionSelect.value);
   section.rows.forEach((row) => {
@@ -1888,6 +2011,7 @@ function syncPeriodToDateValue(value) {
 function renderCategories(period, totalTarget) {
   els.categoryList.replaceChildren();
   const periodEntries = getEntriesForPeriod(period);
+  const upcomingOccurrences = getUnresolvedOccurrencesForRange(period.start, period.end);
   const incomeTarget = getBudgetForRange(period.start, period.end, [getSection(INCOME_SECTION)]);
 
   getExpenseSections().forEach((section) => {
@@ -1895,21 +2019,30 @@ function renderCategories(period, totalTarget) {
     const actual = sumEntryImpacts(
       periodEntries.filter((entry) => entry.category === section.name),
     );
+    const upcoming = sumOccurrenceAmounts(
+      upcomingOccurrences.filter((item) => item.flow === "expense" && item.category === section.name),
+    );
+    const remaining = target - actual - upcoming;
     const share = incomeTarget > 0 ? Math.round((target / incomeTarget) * 100) : 0;
     const pace = getPaceInfo({ actual, target, period, kind: "expense" });
 
     const row = document.createElement("div");
-    row.className = `category-row ${pace.className}`;
+    row.className = `category-row ${pace.className} ${remaining < 0 ? "is-projected-over" : ""}`;
     row.innerHTML = `
       <div>
         <div class="category-name">${section.name}</div>
-        <small>${share}% of period income · ${money(actual)} actual</small>
+        <small>${share}% of period income</small>
+        <div class="category-budget-values">
+          <span><small>Actual</small><strong>${money(actual)}</strong></span>
+          <span><small>Upcoming</small><strong>${money(upcoming)}</strong></span>
+          <span class="${remaining < 0 ? "is-over" : "is-good"}"><small>Remaining</small><strong>${formatRemainingMoney(remaining)}</strong></span>
+        </div>
         <div class="pace-line">
           <span class="status-pill">${pace.label}</span>
-          <span>${money(actual)} of ${money(pace.expected)} expected by now</span>
+          <span>${remaining < 0 ? `${money(Math.abs(remaining))} over after upcoming` : `${money(remaining)} available after upcoming`}</span>
         </div>
       </div>
-      <div class="money">${money(target)}</div>
+      <div class="money"><small>Target</small>${money(target)}</div>
       <div>
         <div class="bar-track" aria-hidden="true"><div class="bar-fill" style="width:${Math.min(share, 100)}%"></div></div>
         <div class="pace-track" aria-hidden="true"><div class="pace-fill" style="width:${pace.progress}%"></div></div>
@@ -1921,6 +2054,10 @@ function renderCategories(period, totalTarget) {
   const savingsSection = getSection(INVESTMENT_SECTION);
   const savingsTarget = getBudgetForRange(period.start, period.end, [savingsSection]);
   const savingsActual = sumEntries(periodEntries.filter((entry) => entry.category === INVESTMENT_SECTION));
+  const savingsUpcoming = sumOccurrenceAmounts(
+    upcomingOccurrences.filter((item) => item.flow === "saving" && item.category === INVESTMENT_SECTION),
+  );
+  const savingsRemaining = savingsTarget - savingsActual - savingsUpcoming;
   const savingsShare = incomeTarget > 0 ? Math.round((savingsTarget / incomeTarget) * 100) : 0;
   const savingsPace = getPaceInfo({ actual: savingsActual, target: savingsTarget, period, kind: "savings" });
   const savingsRow = document.createElement("div");
@@ -1928,13 +2065,18 @@ function renderCategories(period, totalTarget) {
   savingsRow.innerHTML = `
     <div>
       <div class="category-name">Savings</div>
-      <small>${savingsShare}% of period income · ${money(savingsActual)} actual</small>
+      <small>${savingsShare}% of period income</small>
+      <div class="category-budget-values">
+        <span><small>Actual</small><strong>${money(savingsActual)}</strong></span>
+        <span><small>Upcoming</small><strong>${money(savingsUpcoming)}</strong></span>
+        <span class="${savingsRemaining <= 0 ? "is-good" : ""}"><small>Remaining</small><strong>${formatRemainingMoney(savingsRemaining)}</strong></span>
+      </div>
       <div class="pace-line">
         <span class="status-pill">${savingsPace.label}</span>
-        <span>${money(savingsActual)} of ${money(savingsPace.expected)} expected by now</span>
+        <span>${savingsRemaining < 0 ? `${money(Math.abs(savingsRemaining))} ahead after upcoming` : `${money(savingsRemaining)} remaining to schedule`}</span>
       </div>
     </div>
-    <div class="money">${money(savingsTarget)}</div>
+    <div class="money"><small>Target</small>${money(savingsTarget)}</div>
     <div>
       <div class="bar-track" aria-hidden="true"><div class="bar-fill savings-fill" style="width:${Math.min(savingsShare, 100)}%"></div></div>
       <div class="pace-track" aria-hidden="true"><div class="pace-fill" style="width:${savingsPace.progress}%"></div></div>
