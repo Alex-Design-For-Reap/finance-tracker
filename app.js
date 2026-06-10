@@ -14,6 +14,7 @@ const INVESTMENT_SUBCATEGORY_RENAMES = new Map([
   ["eToro Dai / IBKR", "IBKR"],
 ]);
 const INVESTMENT_EXTRA_SUBCATEGORIES = ["Smile (Saving)"];
+const SPLURGE_EXTRA_SUBCATEGORIES = ["Splurge Dai", "Splurge Miguel", "Splurge Alex"];
 const ANNUAL_RETURN_RATE = 0.1;
 const PAY_CYCLE_START_DAY = 14;
 const SUPABASE_URL = "https://cqbtorlmiqdpcoxqnrjy.supabase.co";
@@ -2335,28 +2336,38 @@ function getFirstSubcategory(category) {
 function normalizeFinanceData(data) {
   if (!data?.sections) return data;
   const investmentSection = data.sections.find((section) => section.name === INVESTMENT_SECTION);
-  if (!investmentSection?.rows) return data;
-
-  const rowsByName = new Map();
-  investmentSection.rows.forEach((row) => {
-    const name = normalizeInvestmentSubcategory(row.name);
-    const values = { ...(row.values || {}) };
-    if (!rowsByName.has(name)) {
-      rowsByName.set(name, { ...row, name, values });
-      return;
-    }
-
-    const existing = rowsByName.get(name);
-    Object.entries(values).forEach(([monthKey, amount]) => {
-      existing.values[monthKey] = Number(existing.values[monthKey] || 0) + Number(amount || 0);
-    });
-  });
-
   const monthValues = Object.fromEntries((data.months || []).map((month) => [month.key, 0]));
-  INVESTMENT_EXTRA_SUBCATEGORIES.forEach((name) => {
-    if (!rowsByName.has(name)) rowsByName.set(name, { name, values: { ...monthValues } });
-  });
-  investmentSection.rows = [...rowsByName.values()];
+
+  if (investmentSection?.rows) {
+    const rowsByName = new Map();
+    investmentSection.rows.forEach((row) => {
+      const name = normalizeInvestmentSubcategory(row.name);
+      const values = { ...(row.values || {}) };
+      if (!rowsByName.has(name)) {
+        rowsByName.set(name, { ...row, name, values });
+        return;
+      }
+
+      const existing = rowsByName.get(name);
+      Object.entries(values).forEach(([monthKey, amount]) => {
+        existing.values[monthKey] = Number(existing.values[monthKey] || 0) + Number(amount || 0);
+      });
+    });
+
+    INVESTMENT_EXTRA_SUBCATEGORIES.forEach((name) => {
+      if (!rowsByName.has(name)) rowsByName.set(name, { name, values: { ...monthValues } });
+    });
+    investmentSection.rows = [...rowsByName.values()];
+  }
+
+  const splurgeSection = data.sections.find((section) => section.name === "Splurge");
+  if (splurgeSection?.rows) {
+    const existingNames = new Set(splurgeSection.rows.map((row) => row.name));
+    SPLURGE_EXTRA_SUBCATEGORIES.forEach((name) => {
+      if (!existingNames.has(name)) splurgeSection.rows.push({ name, values: { ...monthValues } });
+    });
+  }
+
   return data;
 }
 
