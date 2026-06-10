@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Weekly Finance Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=20260610-cash-flow-planner" />
+    <link rel="stylesheet" href="styles.css?v=20260610-planned-balance" />
   </head>
   <body>
     <main class="app-shell">
@@ -243,41 +243,6 @@
           </article>
         </div>
 
-        <section class="panel cash-flow-planner">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Forward analysis</p>
-              <h2>Cash-flow planner</h2>
-            </div>
-            <span id="cashFlowPeriodBadge" class="badge">Next 30 days</span>
-          </div>
-          <div class="cash-flow-controls">
-            <label>
-              Opening cash source
-              <select id="cashAccountSelect"></select>
-            </label>
-            <label>
-              Minimum cash buffer
-              <input id="cashBufferInput" type="text" inputmode="decimal" value="2000" />
-            </label>
-          </div>
-          <p class="cash-flow-note">Opening cash uses the current Net Worth account balance. The budget scenario applies remaining targets from today to the end of the selected forecast period.</p>
-          <div class="cash-flow-comparison">
-            <div class="cash-flow-heading">
-              <span></span>
-              <strong>Scheduled forecast</strong>
-              <strong>Budget scenario</strong>
-            </div>
-            <div><span>Opening cash</span><strong id="scheduledOpeningCash">$0</strong><strong id="budgetOpeningCash">$0</strong></div>
-            <div><span>Income</span><strong id="scheduledIncome">$0</strong><strong id="budgetIncome">$0</strong></div>
-            <div><span>Expenses</span><strong id="scheduledExpenses">$0</strong><strong id="budgetExpenses">$0</strong></div>
-            <div><span>Available before investments</span><strong id="scheduledBeforeInvestments">$0</strong><strong id="budgetBeforeInvestments">$0</strong></div>
-            <div><span>Investments</span><strong id="scheduledInvestments">$0</strong><strong id="budgetInvestments">$0</strong></div>
-            <div class="cash-flow-final"><span>Projected final balance</span><strong id="scheduledFinalBalance">$0</strong><strong id="budgetFinalBalance">$0</strong></div>
-          </div>
-          <div id="cashFlowRecommendation" class="cash-flow-recommendation"></div>
-        </section>
-
         <section id="overduePanel" class="panel overdue-panel" hidden>
           <div class="section-heading">
             <div>
@@ -472,6 +437,17 @@
             <select id="planSectionSelect"></select>
           </label>
         </div>
+        <section class="plan-overview">
+          <div class="plan-overview-heading">
+            <div>
+              <p class="eyebrow">Whole budget</p>
+              <h3>Planned balance summary</h3>
+            </div>
+            <span id="planOverviewPeriod" class="badge"></span>
+          </div>
+          <div id="planOverviewSummary" class="plan-overview-grid"></div>
+          <div id="planOverviewMessage" class="plan-overview-message"></div>
+        </section>
         <div id="planEditorSummary" class="budget-target-summary"></div>
         <div id="planEditorList" class="plan-editor-list"></div>
         <div id="planEditActions" class="edit-actions">
@@ -593,6 +569,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=20260610-cash-flow-planner" type="module"></script>
+    <script src="app.js?v=20260610-planned-balance" type="module"></script>
   </body>
 </html>

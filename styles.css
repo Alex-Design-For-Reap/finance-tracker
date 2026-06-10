@@ -458,6 +458,83 @@ body.modal-open {
   gap: 12px;
 }
 
+.plan-overview {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #c8d2ff;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #faf8ff, #f3f7ff);
+}
+
+.plan-overview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plan-overview-heading h3 {
+  margin: 2px 0 0;
+  font-size: 1.05rem;
+}
+
+.plan-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.plan-overview-grid > div {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.plan-overview-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.plan-overview-grid strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.plan-final-balance.is-positive strong {
+  color: var(--green);
+}
+
+.plan-final-balance.is-negative strong {
+  color: var(--red);
+}
+
+.plan-overview-message {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+.plan-overview-message.is-positive {
+  border: 1px solid #b9ddc8;
+  background: #f4fbf7;
+  color: var(--green);
+}
+
+.plan-overview-message.is-negative {
+  border: 1px solid #efc5bf;
+  background: #fff7f6;
+  color: var(--red);
+}
+
 .budget-target-summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -669,7 +746,7 @@ body.modal-open {
 .plan-modal {
   width: min(1100px, 100%);
   max-height: min(84vh, 760px);
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
 }
 
 .modal-heading {
@@ -805,114 +882,6 @@ body.modal-open {
 
 .forecast-kpis .kpi-card {
   min-height: 154px;
-}
-
-.cash-flow-planner {
-  display: grid;
-  gap: 16px;
-}
-
-.cash-flow-controls {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.45fr);
-  gap: 12px;
-}
-
-.cash-flow-note {
-  margin: -4px 0 0;
-  color: var(--muted);
-  font-size: 0.76rem;
-  line-height: 1.4;
-}
-
-.cash-flow-comparison {
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-
-.cash-flow-comparison > div {
-  display: grid;
-  grid-template-columns: minmax(190px, 1fr) minmax(140px, 0.65fr) minmax(140px, 0.65fr);
-  gap: 16px;
-  align-items: center;
-  min-height: 48px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--line);
-}
-
-.cash-flow-comparison > div:last-child {
-  border-bottom: 0;
-}
-
-.cash-flow-comparison span {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
-.cash-flow-comparison strong {
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.cash-flow-heading {
-  background: #f4f6ff;
-}
-
-.cash-flow-heading strong {
-  color: var(--purple-deep);
-  font-size: 0.78rem;
-}
-
-.cash-flow-final {
-  background: #fafbff;
-}
-
-.cash-flow-final strong {
-  font-size: 1.05rem;
-}
-
-.cash-flow-final strong.is-good {
-  color: var(--green);
-}
-
-.cash-flow-final strong.is-over {
-  color: var(--red);
-}
-
-.cash-flow-recommendation {
-  display: grid;
-  gap: 5px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-
-.cash-flow-recommendation b {
-  font-size: 1rem;
-}
-
-.cash-flow-recommendation span,
-.cash-flow-recommendation small {
-  line-height: 1.4;
-}
-
-.cash-flow-recommendation small {
-  color: var(--muted);
-}
-
-.cash-flow-recommendation.is-positive {
-  border-color: #b9ddc8;
-  background: #f4fbf7;
-  color: var(--green);
-}
-
-.cash-flow-recommendation.is-negative {
-  border-color: #efc5bf;
-  background: #fff7f6;
-  color: var(--red);
 }
 
 .upcoming-layout {
@@ -1599,7 +1568,6 @@ body.modal-open {
   }
 
   .upcoming-actions,
-  .cash-flow-controls,
   .import-controls,
   .recurring-form {
     grid-template-columns: 1fr;
@@ -1631,6 +1599,14 @@ body.modal-open {
     grid-template-columns: 1fr 1fr;
   }
 
+  .plan-overview-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .plan-final-balance {
+    grid-column: 1 / -1;
+  }
+
   .budget-target-metrics {
     grid-template-columns: 1fr 1fr;
   }
@@ -1646,12 +1622,6 @@ body.modal-open {
 
   .pay-cycle-month-actions button {
     width: 100%;
-  }
-
-  .cash-flow-comparison > div {
-    grid-template-columns: minmax(120px, 1fr) minmax(100px, 0.7fr) minmax(100px, 0.7fr);
-    gap: 8px;
-    padding: 10px;
   }
 
   .money {
@@ -1681,20 +1651,17 @@ body.modal-open {
 }
 
 @media (max-width: 560px) {
-  .cash-flow-comparison > div {
-    grid-template-columns: 1fr 1fr;
+  .plan-overview-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
-  .cash-flow-comparison > div > span {
-    grid-column: 1 / -1;
+  .plan-overview-grid {
+    grid-template-columns: 1fr;
   }
 
-  .cash-flow-heading > span {
-    display: none;
-  }
-
-  .cash-flow-heading strong {
-    text-align: left;
+  .plan-final-balance {
+    grid-column: auto;
   }
 
   #entryModal {
