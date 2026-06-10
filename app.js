@@ -30,6 +30,7 @@ const STORAGE_KEY = "finance-tracker-dated-entries:v2";
 const RECURRING_STORAGE_KEY = "finance-tracker-recurring-items:v1";
 const RECURRING_STATUS_STORAGE_KEY = "finance-tracker-recurring-status:v1";
 const NET_WORTH_STORAGE_KEY = "finance-tracker-net-worth-items:v1";
+const CASH_FLOW_SETTINGS_KEY = "finance-tracker-cash-flow-settings:v1";
 const LEGACY_STORAGE_KEY = "weekly-finance-tracker:v1";
 const PLAN_STORAGE_KEY = "finance-tracker-plan-overrides:v2";
 const HISTORICAL_SEED_KEY = "finance-tracker-historical-actuals:v2";
@@ -101,6 +102,22 @@ const els = {
   forecastBalanceCard: document.querySelector("#forecastBalanceCard"),
   forecastBalance: document.querySelector("#forecastBalance"),
   forecastBalanceLabel: document.querySelector("#forecastBalanceLabel"),
+  cashFlowPeriodBadge: document.querySelector("#cashFlowPeriodBadge"),
+  cashAccountSelect: document.querySelector("#cashAccountSelect"),
+  cashBufferInput: document.querySelector("#cashBufferInput"),
+  scheduledOpeningCash: document.querySelector("#scheduledOpeningCash"),
+  budgetOpeningCash: document.querySelector("#budgetOpeningCash"),
+  scheduledIncome: document.querySelector("#scheduledIncome"),
+  budgetIncome: document.querySelector("#budgetIncome"),
+  scheduledExpenses: document.querySelector("#scheduledExpenses"),
+  budgetExpenses: document.querySelector("#budgetExpenses"),
+  scheduledBeforeInvestments: document.querySelector("#scheduledBeforeInvestments"),
+  budgetBeforeInvestments: document.querySelector("#budgetBeforeInvestments"),
+  scheduledInvestments: document.querySelector("#scheduledInvestments"),
+  budgetInvestments: document.querySelector("#budgetInvestments"),
+  scheduledFinalBalance: document.querySelector("#scheduledFinalBalance"),
+  budgetFinalBalance: document.querySelector("#budgetFinalBalance"),
+  cashFlowRecommendation: document.querySelector("#cashFlowRecommendation"),
   occurrenceCountBadge: document.querySelector("#occurrenceCountBadge"),
   upcomingOccurrenceList: document.querySelector("#upcomingOccurrenceList"),
   overduePanel: document.querySelector("#overduePanel"),
@@ -230,6 +247,7 @@ let recurringItems = loadRecurringItems();
 let recurringOccurrenceStatuses = loadRecurringOccurrenceStatuses();
 let netWorthItems = loadNetWorthItems();
 let planOverrides = loadPlanOverrides();
+let cashFlowSettings = loadCashFlowSettings();
 let currentUser = null;
 let dashboardReady = false;
 let deletedBulkEntryIds = new Set();
@@ -312,6 +330,16 @@ function setupTrackerListeners() {
   els.savePlanButton.addEventListener("click", savePlanEditor);
   els.resetPlanButton.addEventListener("click", resetPlanSection);
   els.forecastHorizonSelect.addEventListener("change", renderUpcoming);
+  els.cashAccountSelect.addEventListener("change", () => {
+    cashFlowSettings.accountId = els.cashAccountSelect.value;
+    saveCashFlowSettings();
+    renderUpcoming();
+  });
+  els.cashBufferInput.addEventListener("change", () => {
+    cashFlowSettings.buffer = Math.max(parseAmount(els.cashBufferInput.value) || 0, 0);
+    saveCashFlowSettings();
+    renderUpcoming();
+  });
   els.addRecurringButton.addEventListener("click", () => openRecurringModal());
   els.closeRecurringButton.addEventListener("click", closeRecurringModal);
   els.cancelRecurringButton.addEventListener("click", closeRecurringModal);
@@ -510,6 +538,7 @@ async function initializeDashboard() {
   populateRecurringCategoryOptions();
   populateNetWorthFormOptions();
   populateAccountOptions();
+  els.cashBufferInput.value = formatPlanInput(cashFlowSettings.buffer);
   els.entryDateInput.value = getDefaultEntryDateKey();
   els.recurringDueDateInput.value = els.entryDateInput.value;
   populatePeriodOptions(els.entryDateInput.value);
@@ -1323,10 +1352,146 @@ function renderUpcoming() {
   els.forecastBalanceLabel.textContent =
     balance >= 0 ? `${money(balance)} forecast surplus` : `${money(Math.abs(balance))} forecast deficit`;
 
+  renderCashFlowPlanner(forecast, { moneyIn, moneyOut, saved });
   renderUpcomingOccurrences(pendingOccurrences);
   renderOverdueOccurrences(overdueOccurrences);
   renderCompletedOccurrences(completedOccurrences);
   renderRecurringItems();
+}
+
+function renderCashFlowPlanner(forecast, scheduled) {
+  const cashAccounts = getNetWorthBalances().items
+    .filter((item) => item.kind === "asset" && item.groupName === "Accounts & funds")
+    .sort((a, b) => a.name.localeCompare(b.name));
+  populateCashAccountSelect(cashAccounts);
+
+  const openingCash = getSelectedOpeningCash(cashAccounts);
+  const buffer = Math.max(parseAmount(els.cashBufferInput.value) || cashFlowSettings.buffer || 0, 0);
+  const scheduledBeforeInvestments = openingCash + scheduled.moneyIn - scheduled.moneyOut;
+  const scheduledFinal = scheduledBeforeInvestments - scheduled.saved;
+  const horizonLabel = els.forecastHorizonSelect.selectedOptions[0]?.textContent || "Forecast";
+
+  els.cashFlowPeriodBadge.textContent = horizonLabel;
+  els.scheduledOpeningCash.textContent = money(openingCash);
+  els.budgetOpeningCash.textContent = money(openingCash);
+  els.scheduledIncome.textContent = money(scheduled.moneyIn);
+  els.scheduledExpenses.textContent = money(scheduled.moneyOut);
+  els.scheduledBeforeInvestments.textContent = money(scheduledBeforeInvestments);
+  els.scheduledInvestments.textContent = money(scheduled.saved);
+  els.scheduledFinalBalance.textContent = money(scheduledFinal);
+  els.scheduledFinalBalance.className = scheduledFinal >= buffer ? "is-good" : "is-over";
+
+  if (!forecast.end) {
+    setBudgetPlannerUnavailable();
+    renderCashFlowRecommendation({
+      finalBalance: scheduledFinal,
+      buffer,
+      source: "scheduled forecast",
+      budgetGap: null,
+    });
+    return;
+  }
+
+  const today = startOfDay(new Date());
+  const analysisStart = forecast.start > today ? forecast.start : today;
+  const budgetIncomeTarget = getBudgetForRange(analysisStart, forecast.end, [getSection(INCOME_SECTION)]);
+  const budgetExpenseTarget = getBudgetForRange(analysisStart, forecast.end, getExpenseSections());
+  const budgetInvestmentTarget = getBudgetForRange(analysisStart, forecast.end, [getSection(INVESTMENT_SECTION)]);
+  const budgetIncome = budgetIncomeTarget;
+  const budgetExpenses = Math.max(budgetExpenseTarget, scheduled.moneyOut);
+  const budgetInvestments = Math.max(budgetInvestmentTarget, scheduled.saved);
+  const budgetBeforeInvestments = openingCash + budgetIncome - budgetExpenses;
+  const budgetFinal = budgetBeforeInvestments - budgetInvestments;
+  const budgetGap = scheduledFinal - budgetFinal;
+
+  els.budgetIncome.textContent = money(budgetIncome);
+  els.budgetExpenses.textContent = money(budgetExpenses);
+  els.budgetBeforeInvestments.textContent = money(budgetBeforeInvestments);
+  els.budgetInvestments.textContent = money(budgetInvestments);
+  els.budgetFinalBalance.textContent = money(budgetFinal);
+  els.budgetFinalBalance.className = budgetFinal >= buffer ? "is-good" : "is-over";
+
+  renderCashFlowRecommendation({
+    finalBalance: Math.min(scheduledFinal, budgetFinal),
+    buffer,
+    source: budgetFinal <= scheduledFinal ? "budget scenario" : "scheduled forecast",
+    budgetGap,
+  });
+}
+
+function populateCashAccountSelect(accounts) {
+  const defaultAccount = accounts.find((account) => account.subtype === "Savings account") || accounts[0];
+  const currentValue = cashFlowSettings.accountId === "auto"
+    ? defaultAccount?.id
+    : cashFlowSettings.accountId;
+  els.cashAccountSelect.replaceChildren();
+
+  if (!accounts.length) {
+    const option = document.createElement("option");
+    option.value = "none";
+    option.textContent = "No Accounts & funds assets";
+    els.cashAccountSelect.append(option);
+    cashFlowSettings.accountId = "none";
+    return;
+  }
+
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = "Combine all Accounts & funds";
+  els.cashAccountSelect.append(allOption);
+  accounts.forEach((account) => {
+    const option = document.createElement("option");
+    option.value = account.id;
+    option.textContent = `${account.name} · ${money(account.currentValue)}`;
+    els.cashAccountSelect.append(option);
+  });
+  els.cashAccountSelect.value = accounts.some((account) => account.id === currentValue) || currentValue === "all"
+    ? currentValue
+    : defaultAccount.id;
+  cashFlowSettings.accountId = els.cashAccountSelect.value;
+}
+
+function getSelectedOpeningCash(accounts) {
+  if (els.cashAccountSelect.value === "all") {
+    return accounts.reduce((sum, account) => sum + Number(account.currentValue || 0), 0);
+  }
+  return Number(accounts.find((account) => account.id === els.cashAccountSelect.value)?.currentValue || 0);
+}
+
+function setBudgetPlannerUnavailable() {
+  [els.budgetIncome, els.budgetExpenses, els.budgetBeforeInvestments, els.budgetInvestments, els.budgetFinalBalance]
+    .forEach((element) => {
+      element.textContent = "—";
+      element.className = "";
+    });
+}
+
+function renderCashFlowRecommendation({ finalBalance, buffer, source, budgetGap }) {
+  const difference = finalBalance - buffer;
+  els.cashFlowRecommendation.className = `cash-flow-recommendation ${difference >= 0 ? "is-positive" : "is-negative"}`;
+
+  if (difference > 0) {
+    els.cashFlowRecommendation.innerHTML = `
+      <b>${money(difference)} available above your cash buffer</b>
+      <span>Based on the ${source}, you could invest up to ${money(difference)} more and retain ${money(buffer)} in cash.</span>
+      ${budgetGap > 0 ? `<small>${money(budgetGap)} is reserved for budgeted activity that is not yet scheduled.</small>` : ""}
+    `;
+    return;
+  }
+
+  if (difference < 0) {
+    els.cashFlowRecommendation.innerHTML = `
+      <b>${money(Math.abs(difference))} adjustment required</b>
+      <span>Reduce planned investments or expenses by ${money(Math.abs(difference))} to retain your ${money(buffer)} cash buffer.</span>
+      ${budgetGap > 0 ? `<small>${money(budgetGap)} of the difference comes from budgeted activity that is not yet scheduled.</small>` : ""}
+    `;
+    return;
+  }
+
+  els.cashFlowRecommendation.innerHTML = `
+    <b>Cash buffer fully allocated</b>
+    <span>The ${source} finishes exactly at your ${money(buffer)} minimum buffer.</span>
+  `;
 }
 
 function getForecastRange(value, today = startOfDay(new Date())) {
@@ -3166,6 +3331,22 @@ function loadPlanOverrides() {
   } catch {
     return {};
   }
+}
+
+function loadCashFlowSettings() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CASH_FLOW_SETTINGS_KEY) || "{}");
+    return {
+      accountId: stored.accountId || "auto",
+      buffer: Number.isFinite(Number(stored.buffer)) ? Math.max(Number(stored.buffer), 0) : 2000,
+    };
+  } catch {
+    return { accountId: "auto", buffer: 2000 };
+  }
+}
+
+function saveCashFlowSettings() {
+  localStorage.setItem(CASH_FLOW_SETTINGS_KEY, JSON.stringify(cashFlowSettings));
 }
 
 function loadRecurringItems() {
