@@ -714,6 +714,29 @@ body.modal-open {
   gap: 10px;
 }
 
+.overdue-panel {
+  border-color: #efb7b2;
+  background: #fff6f5;
+}
+
+.overdue-panel .section-heading {
+  color: var(--red);
+}
+
+.overdue-panel .occurrence-date {
+  color: var(--red);
+}
+
+.overdue-badge {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.completed-panel {
+  border-color: #bfe0ce;
+  background: #f7fcf9;
+}
+
 .occurrence-group {
   display: grid;
   gap: 8px;
@@ -739,7 +762,7 @@ body.modal-open {
 }
 
 .occurrence-row {
-  grid-template-columns: 12px minmax(0, 1fr) auto;
+  grid-template-columns: 12px minmax(0, 1fr) auto auto;
 }
 
 .recurring-row {
@@ -787,6 +810,36 @@ body.modal-open {
 
 .occurrence-row.is-saving .occurrence-amount {
   color: var(--purple);
+}
+
+.occurrence-row.is-overdue {
+  border-color: #efb7b2;
+  background: #fffafa;
+}
+
+.occurrence-row.is-overdue .occurrence-copy b {
+  color: var(--red);
+}
+
+.occurrence-row.is-completed {
+  border-color: #c6e3d2;
+  background: #f7fcf9;
+}
+
+.occurrence-row.is-completed .occurrence-marker {
+  background: var(--green);
+}
+
+.occurrence-row.is-completed .occurrence-copy b,
+.occurrence-row.is-completed .occurrence-amount {
+  color: var(--green);
+}
+
+.occurrence-status-button {
+  min-height: 34px;
+  padding: 0 10px;
+  white-space: nowrap;
+  font-size: 0.74rem;
 }
 
 .recurring-row button {

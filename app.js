@@ -23,9 +23,11 @@ const ENTRIES_TABLE = "finance_entries";
 const PLAN_OVERRIDES_TABLE = "finance_plan_overrides";
 const PLAN_DATA_TABLE = "finance_plan_data";
 const RECURRING_TABLE = "finance_recurring_items";
+const RECURRING_STATUS_TABLE = "finance_recurring_occurrence_status";
 const NET_WORTH_TABLE = "finance_net_worth_items";
 const STORAGE_KEY = "finance-tracker-dated-entries:v2";
 const RECURRING_STORAGE_KEY = "finance-tracker-recurring-items:v1";
+const RECURRING_STATUS_STORAGE_KEY = "finance-tracker-recurring-status:v1";
 const NET_WORTH_STORAGE_KEY = "finance-tracker-net-worth-items:v1";
 const LEGACY_STORAGE_KEY = "weekly-finance-tracker:v1";
 const PLAN_STORAGE_KEY = "finance-tracker-plan-overrides:v2";
@@ -100,6 +102,12 @@ const els = {
   forecastBalanceLabel: document.querySelector("#forecastBalanceLabel"),
   occurrenceCountBadge: document.querySelector("#occurrenceCountBadge"),
   upcomingOccurrenceList: document.querySelector("#upcomingOccurrenceList"),
+  overduePanel: document.querySelector("#overduePanel"),
+  overdueCountBadge: document.querySelector("#overdueCountBadge"),
+  overdueOccurrenceList: document.querySelector("#overdueOccurrenceList"),
+  completedPanel: document.querySelector("#completedPanel"),
+  completedCountBadge: document.querySelector("#completedCountBadge"),
+  completedOccurrenceList: document.querySelector("#completedOccurrenceList"),
   recurringCountBadge: document.querySelector("#recurringCountBadge"),
   recurringScheduleList: document.querySelector("#recurringScheduleList"),
   addNetWorthButton: document.querySelector("#addNetWorthButton"),
@@ -214,6 +222,7 @@ let financeData;
 let periods = [];
 let entries = loadEntries();
 let recurringItems = loadRecurringItems();
+let recurringOccurrenceStatuses = loadRecurringOccurrenceStatuses();
 let netWorthItems = loadNetWorthItems();
 let planOverrides = loadPlanOverrides();
 let currentUser = null;
@@ -1234,8 +1243,11 @@ function saveRecurringItem(event) {
 
 function removeRecurringItem(id) {
   recurringItems = recurringItems.filter((item) => item.id !== id);
+  recurringOccurrenceStatuses = recurringOccurrenceStatuses.filter((status) => status.recurringItemId !== id);
   saveRecurringItems();
+  saveRecurringOccurrenceStatuses();
   deleteSupabaseRecurringItem(id);
+  deleteSupabaseRecurringOccurrenceStatuses(id);
   renderUpcoming();
 }
 
@@ -1244,12 +1256,17 @@ function renderUpcoming() {
 
   const today = startOfDay(new Date());
   const forecast = getForecastRange(els.forecastHorizonSelect.value, today);
-  const occurrences = forecast.mode === "all-bills"
+  const forecastOccurrences = forecast.mode === "all-bills"
     ? getAllBillOccurrences()
     : getRecurringOccurrences(forecast.start, forecast.end);
-  const moneyInItems = occurrences.filter((item) => item.flow === "income");
-  const moneyOutItems = occurrences.filter((item) => item.flow === "expense");
-  const savedItems = occurrences.filter((item) => item.flow === "saving");
+  const pendingOccurrences = forecastOccurrences.filter(
+    (item) => parseDate(item.date) >= today && !isOccurrenceDone(item),
+  );
+  const completedOccurrences = getCompletedOccurrences();
+  const overdueOccurrences = getOverdueOccurrences(today);
+  const moneyInItems = pendingOccurrences.filter((item) => item.flow === "income");
+  const moneyOutItems = pendingOccurrences.filter((item) => item.flow === "expense");
+  const savedItems = pendingOccurrences.filter((item) => item.flow === "saving");
   const moneyIn = sumOccurrenceAmounts(moneyInItems);
   const moneyOut = sumOccurrenceAmounts(moneyOutItems);
   const saved = sumOccurrenceAmounts(savedItems);
@@ -1273,7 +1290,9 @@ function renderUpcoming() {
   els.forecastBalanceLabel.textContent =
     balance >= 0 ? `${money(balance)} forecast surplus` : `${money(Math.abs(balance))} forecast deficit`;
 
-  renderUpcomingOccurrences(occurrences);
+  renderUpcomingOccurrences(pendingOccurrences);
+  renderOverdueOccurrences(overdueOccurrences);
+  renderCompletedOccurrences(completedOccurrences);
   renderRecurringItems();
 }
 
@@ -1310,22 +1329,42 @@ function getPayCycleStartForDate(date) {
 }
 
 function renderUpcomingOccurrences(occurrences) {
-  els.upcomingOccurrenceList.replaceChildren();
   els.occurrenceCountBadge.textContent = `${occurrences.length} ${occurrences.length === 1 ? "item" : "items"}`;
+  renderOccurrenceGroups(
+    els.upcomingOccurrenceList,
+    occurrences,
+    "No unresolved items are due in this forecast window.",
+  );
+}
 
+function renderOverdueOccurrences(occurrences) {
+  els.overduePanel.hidden = !occurrences.length;
+  els.overdueCountBadge.textContent = `${occurrences.length} overdue`;
+  renderOccurrenceGroups(els.overdueOccurrenceList, occurrences, "", { overdue: true });
+}
+
+function renderCompletedOccurrences(occurrences) {
+  els.completedPanel.hidden = !occurrences.length;
+  els.completedCountBadge.textContent = `${occurrences.length} done`;
+  renderOccurrenceGroups(els.completedOccurrenceList, occurrences, "", { completed: true });
+}
+
+function renderOccurrenceGroups(container, occurrences, emptyText, options = {}) {
+  container.replaceChildren();
   if (!occurrences.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-entries";
-    empty.textContent = "No recurring items are due in this forecast window yet.";
-    els.upcomingOccurrenceList.append(empty);
+    if (emptyText) {
+      const empty = document.createElement("p");
+      empty.className = "empty-entries";
+      empty.textContent = emptyText;
+      container.append(empty);
+    }
     return;
   }
 
   const groups = new Map();
   occurrences.forEach((occurrence) => {
-    const key = occurrence.date;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(occurrence);
+    if (!groups.has(occurrence.date)) groups.set(occurrence.date, []);
+    groups.get(occurrence.date).push(occurrence);
   });
 
   groups.forEach((items, date) => {
@@ -1338,7 +1377,7 @@ function renderUpcomingOccurrences(occurrences) {
 
     items.forEach((item) => {
       const row = document.createElement("div");
-      row.className = `occurrence-row is-${item.flow}`;
+      row.className = `occurrence-row is-${item.flow} ${options.overdue ? "is-overdue" : ""} ${options.completed ? "is-completed" : ""}`;
       row.innerHTML = `
         <span class="occurrence-marker" aria-hidden="true"></span>
         <span class="occurrence-copy">
@@ -1346,11 +1385,17 @@ function renderUpcomingOccurrences(occurrences) {
           <small>${RECURRING_FLOWS[item.flow]} · ${item.category} · ${item.subcategory} · ${RECURRENCE_FREQUENCIES[item.frequency]?.label || item.frequency}</small>
         </span>
         <strong class="occurrence-amount">${money(item.amount)}</strong>
+        <button class="occurrence-status-button ${options.completed ? "secondary-button" : ""}" type="button">
+          ${options.completed ? "Undo" : item.flow === "expense" ? "Mark paid" : "Mark done"}
+        </button>
       `;
+      row.querySelector(".occurrence-status-button").addEventListener("click", () => {
+        setOccurrenceDone(item, !options.completed);
+      });
       group.append(row);
     });
 
-    els.upcomingOccurrenceList.append(group);
+    container.append(group);
   });
 }
 
@@ -1478,11 +1523,59 @@ function getRecurringOccurrences(start, end) {
     .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
 }
 
+function getOverdueOccurrences(today = startOfDay(new Date())) {
+  return recurringItems
+    .flatMap((item) => expandRecurringItem(item, parseDate(item.nextDueDate), today))
+    .filter((item) => !isOccurrenceDone(item))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+}
+
+function getCompletedOccurrences() {
+  const recurringById = new Map(recurringItems.map((item) => [item.id, item]));
+  return recurringOccurrenceStatuses
+    .filter((status) => status.completed && recurringById.has(status.recurringItemId))
+    .map((status) => ({
+      ...recurringById.get(status.recurringItemId),
+      date: status.occurrenceDate,
+      completedAt: status.completedAt,
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name));
+}
+
 function getAllBillOccurrences() {
   return recurringItems
     .filter((item) => item.flow === "expense")
     .map((item) => ({ ...item, date: item.nextDueDate }))
     .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+}
+
+function getOccurrenceStatusId(item) {
+  return `${item.id}::${item.date}`;
+}
+
+function isOccurrenceDone(item) {
+  const status = recurringOccurrenceStatuses.find((current) => current.id === getOccurrenceStatusId(item));
+  return Boolean(status?.completed);
+}
+
+function setOccurrenceDone(item, completed) {
+  const now = new Date().toISOString();
+  const id = getOccurrenceStatusId(item);
+  const existing = recurringOccurrenceStatuses.find((status) => status.id === id);
+  const status = {
+    id,
+    recurringItemId: item.id,
+    occurrenceDate: item.date,
+    completed,
+    completedAt: completed ? now : null,
+    createdAt: existing?.createdAt || now,
+    updatedAt: now,
+  };
+  recurringOccurrenceStatuses = existing
+    ? recurringOccurrenceStatuses.map((current) => (current.id === id ? status : current))
+    : [...recurringOccurrenceStatuses, status];
+  saveRecurringOccurrenceStatuses();
+  renderUpcoming();
 }
 
 function expandRecurringItem(item, start, end) {
@@ -2389,6 +2482,7 @@ async function hydrateFromSupabase() {
     localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(planOverrides));
     await Promise.all([pushEntriesToSupabase(), pushPlanOverridesToSupabase()]);
     await hydrateRecurringItemsFromSupabase();
+    await hydrateRecurringOccurrenceStatusesFromSupabase();
     await hydrateNetWorthItemsFromSupabase();
     setSyncStatus("Supabase sync on", "online");
   } catch (error) {
@@ -2554,6 +2648,85 @@ function fromSupabaseRecurringItem(row) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
+}
+
+async function hydrateRecurringOccurrenceStatusesFromSupabase() {
+  try {
+    const { data, error } = await supabase
+      .from(RECURRING_STATUS_TABLE)
+      .select("*")
+      .eq("user_id", currentUser.id);
+    if (error) throw error;
+    recurringOccurrenceStatuses = mergeSyncedRecords(
+      recurringOccurrenceStatuses,
+      (data || []).map(fromSupabaseRecurringOccurrenceStatus),
+      "recurringStatuses",
+      (a, b) => a.occurrenceDate.localeCompare(b.occurrenceDate),
+    );
+    localStorage.setItem(RECURRING_STATUS_STORAGE_KEY, JSON.stringify(recurringOccurrenceStatuses));
+    await pushRecurringOccurrenceStatusesToSupabase();
+  } catch (error) {
+    console.warn("Recurring occurrence status sync is not ready yet.", error);
+  }
+}
+
+function saveRecurringOccurrenceStatuses() {
+  localStorage.setItem(RECURRING_STATUS_STORAGE_KEY, JSON.stringify(recurringOccurrenceStatuses));
+  pushRecurringOccurrenceStatusesToSupabase().catch((error) => {
+    console.warn("Recurring occurrence status sync failed.", error);
+    setSyncStatus("Occurrence status saved locally - Supabase unavailable", "warning");
+  });
+}
+
+async function pushRecurringOccurrenceStatusesToSupabase() {
+  if (!currentUser) return;
+  if (recurringOccurrenceStatuses.length) {
+    const { error } = await supabase
+      .from(RECURRING_STATUS_TABLE)
+      .upsert(recurringOccurrenceStatuses.map(toSupabaseRecurringOccurrenceStatus), { onConflict: "id" });
+    if (error) throw error;
+  }
+  markDatasetSynced("recurringStatuses");
+  setSyncStatus("Supabase sync on", "online");
+}
+
+async function deleteSupabaseRecurringOccurrenceStatuses(recurringItemId) {
+  if (!currentUser) return;
+  const { error } = await supabase
+    .from(RECURRING_STATUS_TABLE)
+    .delete()
+    .eq("recurring_item_id", toSupabaseKey(recurringItemId))
+    .eq("user_id", currentUser.id);
+  if (error) {
+    console.warn("Recurring occurrence status cleanup failed.", error);
+    return;
+  }
+  markDatasetSynced("recurringStatuses");
+}
+
+function toSupabaseRecurringOccurrenceStatus(status) {
+  return {
+    id: toSupabaseKey(status.id),
+    user_id: currentUser.id,
+    recurring_item_id: toSupabaseKey(status.recurringItemId),
+    occurrence_date: status.occurrenceDate,
+    completed: Boolean(status.completed),
+    completed_at: status.completedAt || null,
+    created_at: status.createdAt || new Date().toISOString(),
+    updated_at: status.updatedAt || status.createdAt || new Date().toISOString(),
+  };
+}
+
+function fromSupabaseRecurringOccurrenceStatus(row) {
+  return {
+    id: fromSupabaseKey(row.id),
+    recurringItemId: fromSupabaseKey(row.recurring_item_id),
+    occurrenceDate: row.occurrence_date,
+    completed: Boolean(row.completed),
+    completedAt: row.completed_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 async function hydrateNetWorthItemsFromSupabase() {
@@ -2809,6 +2982,15 @@ function loadRecurringItems() {
   try {
     const stored = JSON.parse(localStorage.getItem(RECURRING_STORAGE_KEY) || "[]");
     return Array.isArray(stored) ? stored.map(normalizeRecurringItem) : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadRecurringOccurrenceStatuses() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(RECURRING_STATUS_STORAGE_KEY) || "[]");
+    return Array.isArray(stored) ? stored : [];
   } catch {
     return [];
   }

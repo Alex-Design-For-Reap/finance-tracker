@@ -239,6 +239,17 @@
           </article>
         </div>
 
+        <section id="overduePanel" class="panel overdue-panel" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Needs attention</p>
+              <h2>Overdue</h2>
+            </div>
+            <span id="overdueCountBadge" class="badge overdue-badge">0 overdue</span>
+          </div>
+          <div id="overdueOccurrenceList" class="upcoming-occurrence-list"></div>
+        </section>
+
         <div class="upcoming-layout">
           <section class="panel">
             <div class="section-heading">
@@ -262,6 +273,17 @@
             <div id="recurringScheduleList" class="recurring-schedule-list"></div>
           </section>
         </div>
+
+        <section id="completedPanel" class="panel completed-panel" hidden>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Finished entries</p>
+              <h2>Done</h2>
+            </div>
+            <span id="completedCountBadge" class="badge">0 done</span>
+          </div>
+          <div id="completedOccurrenceList" class="upcoming-occurrence-list"></div>
+        </section>
       </section>
 
       <section id="netWorthView" class="net-worth-view" hidden>
@@ -524,6 +546,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=20260610-sync-fix" type="module"></script>
+    <script src="app.js?v=20260610-upcoming-status" type="module"></script>
   </body>
 </html>

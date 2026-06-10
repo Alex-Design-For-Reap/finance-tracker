@@ -51,6 +51,17 @@ create table if not exists public.finance_net_worth_items (
   updated_at timestamptz default now()
 );
 
+create table if not exists public.finance_recurring_occurrence_status (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  recurring_item_id text not null,
+  occurrence_date date not null,
+  completed boolean not null default true,
+  completed_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 alter table public.finance_recurring_items
   drop constraint if exists finance_recurring_items_frequency_check;
 
@@ -83,11 +94,15 @@ create index if not exists finance_recurring_items_user_id_idx
 create index if not exists finance_net_worth_items_user_id_idx
   on public.finance_net_worth_items (user_id);
 
+create index if not exists finance_recurring_occurrence_status_user_id_idx
+  on public.finance_recurring_occurrence_status (user_id);
+
 alter table public.finance_entries enable row level security;
 alter table public.finance_plan_overrides enable row level security;
 alter table public.finance_plan_data enable row level security;
 alter table public.finance_recurring_items enable row level security;
 alter table public.finance_net_worth_items enable row level security;
+alter table public.finance_recurring_occurrence_status enable row level security;
 
 create or replace function public.keep_newer_finance_record()
 returns trigger
@@ -116,6 +131,11 @@ create trigger finance_recurring_items_keep_newer
 drop trigger if exists finance_net_worth_items_keep_newer on public.finance_net_worth_items;
 create trigger finance_net_worth_items_keep_newer
   before update on public.finance_net_worth_items
+  for each row execute function public.keep_newer_finance_record();
+
+drop trigger if exists finance_recurring_occurrence_status_keep_newer on public.finance_recurring_occurrence_status;
+create trigger finance_recurring_occurrence_status_keep_newer
+  before update on public.finance_recurring_occurrence_status
   for each row execute function public.keep_newer_finance_record();
 
 drop policy if exists "Prototype can read entries" on public.finance_entries;
@@ -255,5 +275,31 @@ create policy "Private users can update net worth items"
 
 create policy "Private users can delete net worth items"
   on public.finance_net_worth_items for delete
+  to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists "Private users can read recurring occurrence status" on public.finance_recurring_occurrence_status;
+drop policy if exists "Private users can insert recurring occurrence status" on public.finance_recurring_occurrence_status;
+drop policy if exists "Private users can update recurring occurrence status" on public.finance_recurring_occurrence_status;
+drop policy if exists "Private users can delete recurring occurrence status" on public.finance_recurring_occurrence_status;
+
+create policy "Private users can read recurring occurrence status"
+  on public.finance_recurring_occurrence_status for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+create policy "Private users can insert recurring occurrence status"
+  on public.finance_recurring_occurrence_status for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+create policy "Private users can update recurring occurrence status"
+  on public.finance_recurring_occurrence_status for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Private users can delete recurring occurrence status"
+  on public.finance_recurring_occurrence_status for delete
   to authenticated
   using (auth.uid() = user_id);
