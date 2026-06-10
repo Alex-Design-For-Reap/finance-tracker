@@ -1413,18 +1413,18 @@ body.modal-open {
     width: 100%;
   }
 
-  .entry-row {
+  #entryModal .entry-row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 10px 12px;
     padding: 13px;
   }
 
-  .entry-row-amount {
+  #entryModal .entry-row-amount {
     align-self: start;
     text-align: right;
   }
 
-  .entry-row-actions {
+  #entryModal .entry-row-actions {
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1433,8 +1433,11 @@ body.modal-open {
     border-top: 1px solid var(--line);
   }
 
-  .entry-row-actions button {
+  #entryModal .entry-row-actions button {
     min-height: 40px;
+    width: 100%;
+    margin: 0;
+    position: static;
   }
 
   .forecast-kpis {
