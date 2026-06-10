@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Weekly Finance Tracker</title>
-    <link rel="stylesheet" href="styles.css?v=20260610-tappable-entry-list" />
+    <link rel="stylesheet" href="styles.css?v=20260610-transaction-description" />
   </head>
   <body>
     <main class="app-shell">
@@ -57,6 +57,10 @@
           <label>
             Amount
             <input id="actualInput" type="text" inputmode="decimal" autocomplete="off" />
+          </label>
+          <label>
+            Description / merchant
+            <input id="entryDescriptionInput" type="text" maxlength="160" autocomplete="off" placeholder="e.g. Woolworths groceries" />
           </label>
           <label>
             Type
@@ -546,6 +550,6 @@
       </section>
     </div>
 
-    <script src="app.js?v=20260610-tappable-entry-list" type="module"></script>
+    <script src="app.js?v=20260610-transaction-description" type="module"></script>
   </body>
 </html>

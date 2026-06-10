@@ -126,6 +126,7 @@ const els = {
   periodSelect: document.querySelector("#periodSelect"),
   entryDateInput: document.querySelector("#entryDateInput"),
   actualInput: document.querySelector("#actualInput"),
+  entryDescriptionInput: document.querySelector("#entryDescriptionInput"),
   entryTypeSelect: document.querySelector("#entryTypeSelect"),
   categorySelect: document.querySelector("#categorySelect"),
   subcategorySelect: document.querySelector("#subcategorySelect"),
@@ -533,6 +534,7 @@ function render() {
   const target = getBudgetForRange(period.start, period.end, getExpenseSections());
 
   els.actualInput.value = "";
+  els.entryDescriptionInput.value = "";
   els.targetTitle.textContent = "Money saved / invested";
   els.monthBadge.textContent = period.label;
   els.weeklyTarget.textContent = money(savedTotal);
@@ -585,6 +587,7 @@ function saveEntry() {
   entries.push({
     id: crypto.randomUUID(),
     amount: value,
+    description: normalizeEntryDescription(els.entryDescriptionInput.value),
     type: els.entryTypeSelect.value,
     date: els.entryDateInput.value,
     category: els.categorySelect.value,
@@ -660,7 +663,8 @@ function renderEntryList(context = entryModalContext || createPeriodEntryContext
       row.innerHTML = `
         <div class="entry-row-main">
           <span class="entry-row-copy">
-            <b>${formatDisplayDate(entry.date)}</b>
+            <b>${escapeHtml(entry.description || formatDisplayDate(entry.date))}</b>
+            ${entry.description ? `<span class="entry-row-date">${formatDisplayDate(entry.date)}</span>` : ""}
             <small>${entry.category || "Unclassified"} · ${entry.subcategory || "No subcategory"} · ${getEntryTypeLabel(entry)}</small>
           </span>
           <strong class="entry-row-amount ${getEntryImpact(entry) < 0 ? "entry-credit" : ""}">${formatEntryAmount(entry)}</strong>
@@ -679,6 +683,7 @@ function createPeriodEntryContext(periodEntries = null) {
     getSummary: (items) => `${getSelectedPeriod().label} · ${money(sumEntries(items))} total entries`,
     getDefaults: () => ({
       date: els.entryDateInput.value,
+      description: els.entryDescriptionInput.value,
       type: els.entryTypeSelect.value,
       category: els.categorySelect.value,
       subcategory: els.subcategorySelect.value,
@@ -702,6 +707,7 @@ function createReportEntryContext({ title, category, subcategory = "" }) {
     },
     getDefaults: () => ({
       date: els.entryDateInput.value,
+      description: els.entryDescriptionInput.value,
       type: "expense",
       category,
       subcategory: subcategory || getFirstSubcategory(category),
@@ -741,6 +747,10 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
     <label>
       Amount
       <input name="amount" type="text" inputmode="decimal" value="${entry?.amount ?? ""}" required />
+    </label>
+    <label>
+      Description / merchant
+      <input name="description" type="text" maxlength="160" autocomplete="off" value="${escapeAttribute(entry?.description || defaults.description || "")}" placeholder="e.g. Woolworths groceries" />
     </label>
     <label>
       Type
@@ -796,6 +806,7 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
               ...item,
               date: form.elements.date.value,
               amount,
+              description: normalizeEntryDescription(form.elements.description.value),
               type: typeSelect.value,
               category: categorySelect.value,
               subcategory: subcategorySelect.value,
@@ -808,6 +819,7 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
       entries.push({
         id: crypto.randomUUID(),
         amount,
+        description: normalizeEntryDescription(form.elements.description.value),
         type: typeSelect.value,
         date: form.elements.date.value,
         category: categorySelect.value,
@@ -856,6 +868,7 @@ function renderBulkEntries() {
   header.className = "bulk-entry-header";
   header.innerHTML = `
     <span>Date</span>
+    <span>Description / merchant</span>
     <span>Amount</span>
     <span>Type</span>
     <span>Bucket</span>
@@ -876,6 +889,7 @@ function addBulkRow(entry = null) {
   if (entry?.id) row.dataset.entryId = entry.id;
   row.innerHTML = `
     <input class="bulk-date" type="date" value="${entry?.date || els.entryDateInput.value}" />
+    <input class="bulk-description" type="text" maxlength="160" value="${escapeAttribute(entry?.description || "")}" placeholder="Merchant or details" />
     <input class="bulk-amount" type="text" inputmode="decimal" value="${entry?.amount ?? ""}" placeholder="0.00" />
     <select class="bulk-type"></select>
     <select class="bulk-category"></select>
@@ -911,6 +925,7 @@ function saveBulkEntries() {
   rows.forEach((row) => {
     const amount = parseAmount(row.querySelector(".bulk-amount").value);
     const date = row.querySelector(".bulk-date").value;
+    const description = normalizeEntryDescription(row.querySelector(".bulk-description").value);
     const type = row.querySelector(".bulk-type").value;
     const category = row.querySelector(".bulk-category").value;
     const subcategory = row.querySelector(".bulk-subcategory").value;
@@ -924,6 +939,7 @@ function saveBulkEntries() {
         ...nextEntriesById.get(id),
         amount,
         date,
+        description,
         type,
         category,
         subcategory,
@@ -938,6 +954,7 @@ function saveBulkEntries() {
       id: newId,
       amount,
       date,
+      description,
       type,
       category,
       subcategory,
@@ -1035,7 +1052,7 @@ function renderImportRows() {
         <span>${duplicate ? "Duplicate" : "Use"}</span>
       </label>
       <input class="import-date" type="date" value="${item.date}" />
-      <span class="import-description">${escapeHtml(item.description || "Imported transaction")}</span>
+      <input class="import-description" type="text" maxlength="160" value="${escapeAttribute(item.description || "Imported transaction")}" />
       <input class="import-amount" type="text" inputmode="decimal" value="${formatPlanInput(item.amount)}" />
       <select class="import-type"></select>
       <select class="import-category"></select>
@@ -1073,7 +1090,7 @@ function saveImportedEntries() {
         category: row.querySelector(".import-category").value,
         subcategory: row.querySelector(".import-subcategory").value,
         accountId: row.querySelector(".import-account").value,
-        description: item.description,
+        description: normalizeEntryDescription(row.querySelector(".import-description").value),
         source: `${IMPORT_SOURCE_PREFIX}${item.fingerprint}`,
         createdAt: now,
       });
@@ -2348,8 +2365,19 @@ function normalizeInvestmentSubcategory(name) {
 }
 
 function normalizeEntry(entry) {
-  if (entry?.category !== INVESTMENT_SECTION) return entry;
-  return { ...entry, subcategory: normalizeInvestmentSubcategory(entry.subcategory) };
+  if (!entry) return entry;
+  return {
+    ...entry,
+    description: normalizeEntryDescription(entry.description),
+    subcategory:
+      entry.category === INVESTMENT_SECTION
+        ? normalizeInvestmentSubcategory(entry.subcategory)
+        : entry.subcategory,
+  };
+}
+
+function normalizeEntryDescription(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, 160);
 }
 
 function normalizeRecurringItem(item) {
@@ -2542,6 +2570,7 @@ function toSupabaseEntry(entry) {
     entry_date: entry.date,
     category: entry.category,
     subcategory: entry.subcategory || null,
+    description: entry.description || null,
     linked_account_id: entry.accountId ? toSupabaseKey(entry.accountId) : null,
     source: entry.source || null,
     created_at: entry.createdAt || new Date().toISOString(),
@@ -2557,6 +2586,7 @@ function fromSupabaseEntry(row) {
     date: row.entry_date,
     category: row.category,
     subcategory: row.subcategory || "",
+    description: row.description || "",
     accountId: row.linked_account_id ? fromSupabaseKey(row.linked_account_id) : "",
     source: row.source || undefined,
     createdAt: row.created_at,

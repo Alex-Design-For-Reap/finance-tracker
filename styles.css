@@ -285,6 +285,14 @@ body.modal-open {
   font-size: 0.9rem;
 }
 
+.entry-row-date {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
 .entry-row small {
   display: block;
   margin-top: 3px;
@@ -348,7 +356,7 @@ body.modal-open {
 .bulk-entry-rows {
   display: grid;
   gap: 8px;
-  min-width: 1160px;
+  min-width: 1420px;
 }
 
 .import-rows {
@@ -368,7 +376,7 @@ body.modal-open {
 
 .bulk-entry-header,
 .bulk-entry-row {
-  grid-template-columns: 140px 120px minmax(145px, 0.75fr) minmax(170px, 0.95fr) minmax(210px, 1fr) minmax(190px, 0.9fr) 92px;
+  grid-template-columns: 140px minmax(240px, 1.15fr) 120px minmax(145px, 0.75fr) minmax(170px, 0.95fr) minmax(210px, 1fr) minmax(190px, 0.9fr) 92px;
 }
 
 .import-entry-header,

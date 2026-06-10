@@ -8,6 +8,9 @@ alter table public.finance_entries
   add column if not exists linked_account_id text;
 
 alter table public.finance_entries
+  add column if not exists description text;
+
+alter table public.finance_entries
   drop constraint if exists finance_entries_entry_type_check;
 
 alter table public.finance_entries
