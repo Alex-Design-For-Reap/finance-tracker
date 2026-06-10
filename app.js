@@ -159,7 +159,6 @@ const els = {
   planPeriodModeSelect: document.querySelector("#planPeriodModeSelect"),
   planMonthSelect: document.querySelector("#planMonthSelect"),
   planSectionSelect: document.querySelector("#planSectionSelect"),
-  planOverviewPeriod: document.querySelector("#planOverviewPeriod"),
   planOverviewSummary: document.querySelector("#planOverviewSummary"),
   planOverviewMessage: document.querySelector("#planOverviewMessage"),
   planEditorSummary: document.querySelector("#planEditorSummary"),
@@ -1899,7 +1898,6 @@ function renderPlanOverview(period) {
   const availableBeforeInvestments = plannedIncome - plannedExpenses;
   const finalBalance = availableBeforeInvestments - plannedInvestments;
 
-  els.planOverviewPeriod.textContent = period.shortLabel;
   els.planOverviewSummary.innerHTML = `
     <div><span>Planned income</span><strong>${money(plannedIncome)}</strong></div>
     <div><span>Planned expenses</span><strong>-${money(plannedExpenses)}</strong></div>

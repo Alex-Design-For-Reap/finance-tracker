@@ -460,37 +460,28 @@ body.modal-open {
 
 .plan-overview {
   display: grid;
-  gap: 10px;
-  padding: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.55fr);
+  gap: 8px;
+  padding: 8px;
   border: 1px solid #c8d2ff;
   border-radius: 8px;
-  background: linear-gradient(135deg, #faf8ff, #f3f7ff);
-}
-
-.plan-overview-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.plan-overview-heading h3 {
-  margin: 2px 0 0;
-  font-size: 1.05rem;
+  background: #f7f8ff;
 }
 
 .plan-overview-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  gap: 4px;
 }
 
 .plan-overview-grid > div {
   min-width: 0;
-  padding: 11px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
+  padding: 6px 8px;
+  border-right: 1px solid var(--line);
+}
+
+.plan-overview-grid > div:last-child {
+  border-right: 0;
 }
 
 .plan-overview-grid span {
@@ -502,9 +493,9 @@ body.modal-open {
 
 .plan-overview-grid strong {
   display: block;
-  margin-top: 5px;
+  margin-top: 2px;
   color: var(--ink);
-  font-size: 1rem;
+  font-size: 0.9rem;
 }
 
 .plan-final-balance.is-positive strong {
@@ -517,10 +508,11 @@ body.modal-open {
 
 .plan-overview-message {
   display: grid;
-  gap: 3px;
-  padding: 10px 12px;
+  align-content: center;
+  gap: 2px;
+  padding: 7px 10px;
   border-radius: 8px;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 .plan-overview-message.is-positive {
@@ -543,7 +535,7 @@ body.modal-open {
 
 .budget-target-summary > div {
   min-width: 0;
-  padding: 12px;
+  padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f8faff;
@@ -593,17 +585,18 @@ body.modal-open {
 
 .plan-editor-list {
   display: grid;
-  gap: 8px;
+  gap: 6px;
   overflow: auto;
   padding-right: 4px;
+  overscroll-behavior: contain;
 }
 
 .plan-row {
   display: grid;
   grid-template-columns: minmax(170px, 0.8fr) minmax(360px, 1.4fr) 150px;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: 10px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfa;
@@ -744,9 +737,12 @@ body.modal-open {
 }
 
 .plan-modal {
-  width: min(1100px, 100%);
-  max-height: min(84vh, 760px);
+  width: min(1400px, 96vw);
+  height: min(94dvh, 980px);
+  max-height: 94dvh;
   grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+  gap: 9px;
+  padding: 16px;
 }
 
 .modal-heading {
@@ -1603,6 +1599,10 @@ body.modal-open {
     grid-template-columns: 1fr 1fr;
   }
 
+  .plan-overview {
+    grid-template-columns: 1fr;
+  }
+
   .plan-final-balance {
     grid-column: 1 / -1;
   }
@@ -1651,17 +1651,28 @@ body.modal-open {
 }
 
 @media (max-width: 560px) {
-  .plan-overview-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .plan-overview-grid {
     grid-template-columns: 1fr;
   }
 
+  .plan-overview-grid > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .plan-overview-grid > div:last-child {
+    border-bottom: 0;
+  }
+
   .plan-final-balance {
     grid-column: auto;
+  }
+
+  .plan-modal {
+    width: 100%;
+    height: 96dvh;
+    max-height: 96dvh;
+    padding: 14px;
   }
 
   #entryModal {
