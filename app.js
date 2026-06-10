@@ -653,8 +653,10 @@ function renderEntryList(context = entryModalContext || createPeriodEntryContext
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date))
     .forEach((entry, index) => {
-      const row = document.createElement("div");
+      const row = document.createElement("button");
       row.className = "entry-row";
+      row.type = "button";
+      row.setAttribute("aria-label", `Edit entry ${index + 1}`);
       row.innerHTML = `
         <div class="entry-row-main">
           <span class="entry-row-copy">
@@ -663,13 +665,9 @@ function renderEntryList(context = entryModalContext || createPeriodEntryContext
           </span>
           <strong class="entry-row-amount ${getEntryImpact(entry) < 0 ? "entry-credit" : ""}">${formatEntryAmount(entry)}</strong>
         </div>
-        <div class="entry-row-actions">
-          <button type="button" aria-label="Edit entry ${index + 1}">Edit</button>
-          <button class="entry-remove-button" type="button" aria-label="Remove entry ${index + 1}">Remove</button>
-        </div>
+        <span class="entry-row-chevron" aria-hidden="true">›</span>
       `;
-      row.querySelector(`[aria-label="Edit entry ${index + 1}"]`).addEventListener("click", () => renderEditEntry(entry, context));
-      row.querySelector(`[aria-label="Remove entry ${index + 1}"]`).addEventListener("click", () => removeEntry(entry.id));
+      row.addEventListener("click", () => renderEditEntry(entry, context));
       els.entryList.append(row);
     });
 }
@@ -760,9 +758,10 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
       Linked account
       <select name="accountId"></select>
     </label>
-    <div class="edit-actions">
+    <div class="edit-actions ${entry ? "edit-entry-actions" : ""}">
       <button type="submit">Save changes</button>
       <button class="secondary-button" type="button" data-cancel-edit>Cancel</button>
+      ${entry ? '<button class="entry-delete-action" type="button" data-delete-entry>Remove entry</button>' : ""}
     </div>
   `;
 
@@ -779,6 +778,10 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
     populateSubcategorySelect(subcategorySelect, categorySelect.value);
   });
   form.querySelector("[data-cancel-edit]").addEventListener("click", () => {
+    renderEntryList(context);
+  });
+  form.querySelector("[data-delete-entry]")?.addEventListener("click", () => {
+    removeEntry(entry.id);
     renderEntryList(context);
   });
   form.addEventListener("submit", (event) => {

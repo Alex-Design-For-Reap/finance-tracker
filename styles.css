@@ -245,15 +245,26 @@ body.modal-open {
 }
 
 .entry-row {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 64px;
-  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 14px;
   border: 1px solid #d9e2dc;
   border-radius: 8px;
   background: #ffffff;
-  overflow: visible;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+.entry-row:hover,
+.entry-row:focus-visible {
+  border-color: #bcc9ff;
+  background: #fafbff;
+  outline: none;
 }
 
 .entry-row-main {
@@ -261,6 +272,7 @@ body.modal-open {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 12px;
+  min-width: 0;
 }
 
 .entry-row-copy {
@@ -291,31 +303,22 @@ body.modal-open {
   color: var(--green);
 }
 
-.entry-row-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.entry-row-actions button {
-  min-height: 38px;
-  width: 100%;
-  padding: 0 10px;
-  background: var(--blue-soft);
-  color: var(--purple-deep);
-  font-size: 0.72rem;
-}
-
-.entry-row-actions .entry-remove-button {
-  background: var(--red-soft);
-  color: var(--red);
+.entry-row-chevron {
+  color: var(--muted);
+  font-size: 1.5rem;
+  line-height: 1;
 }
 
 .edit-entry-form {
   display: grid;
   gap: 12px;
+}
+
+.edit-entry-actions .entry-delete-action {
+  grid-column: 1 / -1;
+  border: 1px solid #efc5bf;
+  background: var(--red-soft);
+  color: var(--red);
 }
 
 .bulk-modal {
@@ -1425,13 +1428,10 @@ body.modal-open {
   }
 
   #entryModal .entry-row {
-    display: flex;
-    flex-direction: column;
-    height: auto;
-    min-height: 0;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    min-height: 76px;
     padding: 13px;
-    overflow: visible;
   }
 
   #entryModal .entry-row-main {
@@ -1444,28 +1444,6 @@ body.modal-open {
   #entryModal .entry-row-amount {
     align-self: start;
     text-align: right;
-  }
-
-  #entryModal .entry-row-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    width: 100%;
-    min-height: 50px;
-    gap: 8px;
-    padding-top: 10px;
-    border-top: 1px solid var(--line);
-    position: relative;
-    z-index: 2;
-  }
-
-  #entryModal .entry-row-actions button {
-    min-height: 40px;
-    height: 40px;
-    width: 100%;
-    margin: 0;
-    position: static;
-    visibility: visible;
-    opacity: 1;
   }
 
   .forecast-kpis {
