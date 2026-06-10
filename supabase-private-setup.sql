@@ -89,6 +89,35 @@ alter table public.finance_plan_data enable row level security;
 alter table public.finance_recurring_items enable row level security;
 alter table public.finance_net_worth_items enable row level security;
 
+create or replace function public.keep_newer_finance_record()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.updated_at is not null
+    and new.updated_at is not null
+    and new.updated_at < old.updated_at then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists finance_entries_keep_newer on public.finance_entries;
+create trigger finance_entries_keep_newer
+  before update on public.finance_entries
+  for each row execute function public.keep_newer_finance_record();
+
+drop trigger if exists finance_recurring_items_keep_newer on public.finance_recurring_items;
+create trigger finance_recurring_items_keep_newer
+  before update on public.finance_recurring_items
+  for each row execute function public.keep_newer_finance_record();
+
+drop trigger if exists finance_net_worth_items_keep_newer on public.finance_net_worth_items;
+create trigger finance_net_worth_items_keep_newer
+  before update on public.finance_net_worth_items
+  for each row execute function public.keep_newer_finance_record();
+
 drop policy if exists "Prototype can read entries" on public.finance_entries;
 drop policy if exists "Prototype can insert entries" on public.finance_entries;
 drop policy if exists "Prototype can update entries" on public.finance_entries;

@@ -30,6 +30,8 @@ const NET_WORTH_STORAGE_KEY = "finance-tracker-net-worth-items:v1";
 const LEGACY_STORAGE_KEY = "weekly-finance-tracker:v1";
 const PLAN_STORAGE_KEY = "finance-tracker-plan-overrides:v2";
 const HISTORICAL_SEED_KEY = "finance-tracker-historical-actuals:v2";
+const SYNC_STATE_STORAGE_KEY = "finance-tracker-sync-state:v1";
+const PLAN_DIRTY_STORAGE_KEY = "finance-tracker-plan-dirty-at:v1";
 const HISTORICAL_ACTUAL_MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04"];
 const IMPORT_SOURCE_PREFIX = "csv-import:";
 const RECURRENCE_FREQUENCIES = {
@@ -221,14 +223,39 @@ let entryModalContext = null;
 let activeAppView = "dashboard";
 const collapsedReportCategories = new Set();
 let importedCsvRows = [];
+let syncState = loadSyncState();
+let cloudRefreshInProgress = false;
+let lastCloudRefreshAt = 0;
 
 init();
 
 async function init() {
   setupAuthListeners();
   setupTrackerListeners();
+  setupCloudRefreshListeners();
   await hydrateAuthState();
   await initializeDashboard();
+}
+
+function setupCloudRefreshListeners() {
+  window.addEventListener("focus", refreshFromCloudIfReady);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshFromCloudIfReady();
+  });
+}
+
+async function refreshFromCloudIfReady() {
+  if (!currentUser || !dashboardReady || cloudRefreshInProgress) return;
+  if (Date.now() - lastCloudRefreshAt < 5000) return;
+  cloudRefreshInProgress = true;
+  try {
+    await hydrateFromSupabase();
+    populateAccountOptions();
+    render();
+    lastCloudRefreshAt = Date.now();
+  } finally {
+    cloudRefreshInProgress = false;
+  }
 }
 
 function setupTrackerListeners() {
@@ -457,6 +484,7 @@ async function initializeDashboard() {
 
   seedHistoricalActualEntries();
   await hydrateFromSupabase();
+  lastCloudRefreshAt = Date.now();
 
   populateCategoryOptions();
   populatePlanOptions();
@@ -1155,8 +1183,11 @@ function saveNetWorthItem(event) {
 }
 
 function removeNetWorthItem(id) {
+  const now = new Date().toISOString();
   netWorthItems = netWorthItems.filter((item) => item.id !== id);
-  entries = entries.map((entry) => (entry.accountId === id ? { ...entry, accountId: "" } : entry));
+  entries = entries.map((entry) =>
+    entry.accountId === id ? { ...entry, accountId: "", updatedAt: now } : entry,
+  );
   saveNetWorthItems();
   saveEntries();
   deleteSupabaseNetWorthItem(id);
@@ -2341,11 +2372,18 @@ async function hydrateFromSupabase() {
     if (entriesError) throw entriesError;
     if (overridesError) throw overridesError;
 
-    entries = mergeEntries(entries.map(normalizeEntry), (remoteEntries || []).map(fromSupabaseEntry));
-    planOverrides = normalizePlanOverrides({
-      ...Object.fromEntries((remoteOverrides || []).map((row) => [fromSupabaseKey(row.override_key), Number(row.amount)])),
-      ...planOverrides,
-    });
+    entries = mergeSyncedRecords(
+      entries.map(normalizeEntry),
+      (remoteEntries || []).map(fromSupabaseEntry),
+      "entries",
+      (a, b) => String(a.date).localeCompare(String(b.date)),
+    );
+    const remotePlanOverrides = normalizePlanOverrides(
+      Object.fromEntries((remoteOverrides || []).map((row) => [fromSupabaseKey(row.override_key), Number(row.amount)])),
+    );
+    planOverrides = shouldPreserveLocalPlanOverrides()
+      ? { ...remotePlanOverrides, ...planOverrides }
+      : remotePlanOverrides;
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
     localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(planOverrides));
@@ -2359,13 +2397,6 @@ async function hydrateFromSupabase() {
   }
 }
 
-function mergeEntries(localEntries, remoteEntries) {
-  const merged = new Map();
-  remoteEntries.forEach((entry) => merged.set(entry.id, entry));
-  localEntries.forEach((entry) => merged.set(entry.id, entry));
-  return [...merged.values()].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-}
-
 function syncEntriesToSupabase() {
   pushEntriesToSupabase().catch((error) => {
     console.warn("Entry sync failed.", error);
@@ -2375,11 +2406,13 @@ function syncEntriesToSupabase() {
 
 async function pushEntriesToSupabase() {
   if (!currentUser) return;
-  if (!entries.length) return;
-  const { error } = await supabase
-    .from(ENTRIES_TABLE)
-    .upsert(entries.map(toSupabaseEntry), { onConflict: "id" });
-  if (error) throw error;
+  if (entries.length) {
+    const { error } = await supabase
+      .from(ENTRIES_TABLE)
+      .upsert(entries.map(toSupabaseEntry), { onConflict: "id" });
+    if (error) throw error;
+  }
+  markDatasetSynced("entries");
   setSyncStatus("Supabase sync on", "online");
 }
 
@@ -2395,6 +2428,7 @@ async function deleteSupabaseEntry(id) {
     setSyncStatus("Local backup only - Supabase not ready", "warning");
     return;
   }
+  markDatasetSynced("entries");
   setSyncStatus("Supabase sync on", "online");
 }
 
@@ -2437,19 +2471,17 @@ async function hydrateRecurringItemsFromSupabase() {
       .eq("user_id", currentUser.id);
     if (error) throw error;
 
-    recurringItems = mergeRecurringItems(recurringItems.map(normalizeRecurringItem), (data || []).map(fromSupabaseRecurringItem));
+    recurringItems = mergeSyncedRecords(
+      recurringItems.map(normalizeRecurringItem),
+      (data || []).map(fromSupabaseRecurringItem),
+      "recurring",
+      (a, b) => a.nextDueDate.localeCompare(b.nextDueDate),
+    );
     localStorage.setItem(RECURRING_STORAGE_KEY, JSON.stringify(recurringItems));
     await pushRecurringItemsToSupabase();
   } catch (error) {
     console.warn("Recurring item sync is not ready yet.", error);
   }
-}
-
-function mergeRecurringItems(localItems, remoteItems) {
-  const merged = new Map();
-  remoteItems.forEach((item) => merged.set(item.id, item));
-  localItems.forEach((item) => merged.set(item.id, item));
-  return [...merged.values()].sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate));
 }
 
 function saveRecurringItems() {
@@ -2462,11 +2494,14 @@ function saveRecurringItems() {
 }
 
 async function pushRecurringItemsToSupabase() {
-  if (!currentUser || !recurringItems.length) return;
-  const { error } = await supabase
-    .from(RECURRING_TABLE)
-    .upsert(recurringItems.map(toSupabaseRecurringItem), { onConflict: "id" });
-  if (error) throw error;
+  if (!currentUser) return;
+  if (recurringItems.length) {
+    const { error } = await supabase
+      .from(RECURRING_TABLE)
+      .upsert(recurringItems.map(toSupabaseRecurringItem), { onConflict: "id" });
+    if (error) throw error;
+  }
+  markDatasetSynced("recurring");
   setSyncStatus("Supabase sync on", "online");
 }
 
@@ -2482,6 +2517,7 @@ async function deleteSupabaseRecurringItem(id) {
     setSyncStatus("Recurring item deleted locally - run Supabase setup", "warning");
     return;
   }
+  markDatasetSynced("recurring");
   setSyncStatus("Supabase sync on", "online");
 }
 
@@ -2527,19 +2563,17 @@ async function hydrateNetWorthItemsFromSupabase() {
       .select("*")
       .eq("user_id", currentUser.id);
     if (error) throw error;
-    netWorthItems = mergeNetWorthItems(netWorthItems, (data || []).map(fromSupabaseNetWorthItem));
+    netWorthItems = mergeSyncedRecords(
+      netWorthItems,
+      (data || []).map(fromSupabaseNetWorthItem),
+      "netWorth",
+      (a, b) => a.name.localeCompare(b.name),
+    );
     localStorage.setItem(NET_WORTH_STORAGE_KEY, JSON.stringify(netWorthItems));
     await pushNetWorthItemsToSupabase();
   } catch (error) {
     console.warn("Net worth sync is not ready yet.", error);
   }
-}
-
-function mergeNetWorthItems(localItems, remoteItems) {
-  const merged = new Map();
-  remoteItems.forEach((item) => merged.set(item.id, item));
-  localItems.forEach((item) => merged.set(item.id, item));
-  return [...merged.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function saveNetWorthItems() {
@@ -2551,11 +2585,14 @@ function saveNetWorthItems() {
 }
 
 async function pushNetWorthItemsToSupabase() {
-  if (!currentUser || !netWorthItems.length) return;
-  const { error } = await supabase
-    .from(NET_WORTH_TABLE)
-    .upsert(netWorthItems.map(toSupabaseNetWorthItem), { onConflict: "id" });
-  if (error) throw error;
+  if (!currentUser) return;
+  if (netWorthItems.length) {
+    const { error } = await supabase
+      .from(NET_WORTH_TABLE)
+      .upsert(netWorthItems.map(toSupabaseNetWorthItem), { onConflict: "id" });
+    if (error) throw error;
+  }
+  markDatasetSynced("netWorth");
   setSyncStatus("Supabase sync on", "online");
 }
 
@@ -2571,6 +2608,7 @@ async function deleteSupabaseNetWorthItem(id) {
     setSyncStatus("Net worth deleted locally - run Supabase setup", "warning");
     return;
   }
+  markDatasetSynced("netWorth");
   setSyncStatus("Supabase sync on", "online");
 }
 
@@ -2636,6 +2674,7 @@ function seedHistoricalActualEntries() {
 function savePlanOverrides() {
   planOverrides = normalizePlanOverrides(planOverrides);
   localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(planOverrides));
+  localStorage.setItem(PLAN_DIRTY_STORAGE_KEY, new Date().toISOString());
   syncPlanOverridesToSupabase();
 }
 
@@ -2660,12 +2699,14 @@ async function pushPlanOverridesToSupabase() {
       updated_at: new Date().toISOString(),
     };
   });
-  if (!payload.length) return;
-
-  const { error } = await supabase
-    .from(PLAN_OVERRIDES_TABLE)
-    .upsert(payload, { onConflict: "override_key" });
-  if (error) throw error;
+  if (payload.length) {
+    const { error } = await supabase
+      .from(PLAN_OVERRIDES_TABLE)
+      .upsert(payload, { onConflict: "override_key" });
+    if (error) throw error;
+  }
+  localStorage.removeItem(PLAN_DIRTY_STORAGE_KEY);
+  markDatasetSynced("planOverrides");
   setSyncStatus("Supabase sync on", "online");
 }
 
@@ -2681,6 +2722,7 @@ async function deleteSupabasePlanOverride(key) {
     setSyncStatus("Local backup only - Supabase not ready", "warning");
     return;
   }
+  markDatasetSynced("planOverrides");
   setSyncStatus("Supabase sync on", "online");
 }
 
@@ -2697,6 +2739,62 @@ function toSupabaseKey(id) {
 function fromSupabaseKey(id) {
   const prefix = `${currentUser?.id}:`;
   return String(id).startsWith(prefix) ? String(id).slice(prefix.length) : id;
+}
+
+function loadSyncState() {
+  try {
+    return JSON.parse(localStorage.getItem(SYNC_STATE_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function markDatasetSynced(dataset) {
+  syncState = { ...syncState, [dataset]: new Date().toISOString() };
+  localStorage.setItem(SYNC_STATE_STORAGE_KEY, JSON.stringify(syncState));
+}
+
+function getRecordTimestamp(record) {
+  const value = record?.updatedAt || record?.createdAt;
+  const timestamp = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function mergeSyncedRecords(localItems, remoteItems, dataset, sortItems) {
+  const remoteById = new Map(remoteItems.map((item) => [item.id, item]));
+  const merged = new Map(remoteById);
+  const lastSyncedAt = syncState[dataset] ? new Date(syncState[dataset]).getTime() : 0;
+  const latestRemoteTimestamp = remoteItems.reduce(
+    (latest, item) => Math.max(latest, getRecordTimestamp(item)),
+    0,
+  );
+
+  localItems.forEach((localItem) => {
+    const remoteItem = remoteById.get(localItem.id);
+    if (remoteItem) {
+      merged.set(
+        localItem.id,
+        getRecordTimestamp(localItem) > getRecordTimestamp(remoteItem) ? localItem : remoteItem,
+      );
+      return;
+    }
+
+    const localTimestamp = getRecordTimestamp(localItem);
+    const isNewerOfflineRecord = lastSyncedAt > 0
+      ? localTimestamp > lastSyncedAt
+      : remoteItems.length === 0 || localTimestamp > latestRemoteTimestamp;
+    if (isNewerOfflineRecord) merged.set(localItem.id, localItem);
+  });
+
+  const result = [...merged.values()];
+  return sortItems ? result.sort(sortItems) : result;
+}
+
+function shouldPreserveLocalPlanOverrides() {
+  const dirtyAt = localStorage.getItem(PLAN_DIRTY_STORAGE_KEY);
+  if (!dirtyAt) return false;
+  const lastSyncedAt = syncState.planOverrides ? new Date(syncState.planOverrides).getTime() : 0;
+  return new Date(dirtyAt).getTime() > lastSyncedAt;
 }
 
 function loadPlanOverrides() {
