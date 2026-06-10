@@ -656,13 +656,15 @@ function renderEntryList(context = entryModalContext || createPeriodEntryContext
       const row = document.createElement("div");
       row.className = "entry-row";
       row.innerHTML = `
-        <span>
+        <span class="entry-row-copy">
           <b>${formatDisplayDate(entry.date)}</b>
           <small>${entry.category || "Unclassified"} · ${entry.subcategory || "No subcategory"} · ${getEntryTypeLabel(entry)}</small>
         </span>
-        <strong class="${getEntryImpact(entry) < 0 ? "entry-credit" : ""}">${formatEntryAmount(entry)}</strong>
-        <button type="button" aria-label="Edit entry ${index + 1}">Edit</button>
-        <button type="button" aria-label="Remove entry ${index + 1}">Remove</button>
+        <strong class="entry-row-amount ${getEntryImpact(entry) < 0 ? "entry-credit" : ""}">${formatEntryAmount(entry)}</strong>
+        <span class="entry-row-actions">
+          <button type="button" aria-label="Edit entry ${index + 1}">Edit</button>
+          <button class="entry-remove-button" type="button" aria-label="Remove entry ${index + 1}">Remove</button>
+        </span>
       `;
       row.querySelector(`[aria-label="Edit entry ${index + 1}"]`).addEventListener("click", () => renderEditEntry(entry, context));
       row.querySelector(`[aria-label="Remove entry ${index + 1}"]`).addEventListener("click", () => removeEntry(entry.id));

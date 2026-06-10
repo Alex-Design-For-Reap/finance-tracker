@@ -246,30 +246,37 @@ body.modal-open {
 
 .entry-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px auto auto;
+  grid-template-columns: minmax(0, 1fr) 110px auto;
   align-items: center;
-  gap: 8px;
-  min-height: 54px;
-  padding: 10px;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px;
   border: 1px solid #d9e2dc;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.entry-row-copy {
+  min-width: 0;
 }
 
 .entry-row b {
   display: block;
   color: var(--ink);
+  font-size: 0.9rem;
 }
 
 .entry-row small {
   display: block;
   margin-top: 3px;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .entry-row strong {
   color: var(--ink);
   font-variant-numeric: tabular-nums;
+  font-size: 1rem;
   text-align: right;
 }
 
@@ -277,12 +284,22 @@ body.modal-open {
   color: var(--green);
 }
 
-.entry-row button {
-  min-height: 28px;
-  padding: 0 8px;
+.entry-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.entry-row-actions button {
+  min-height: 34px;
+  padding: 0 10px;
   background: var(--blue-soft);
   color: var(--purple-deep);
   font-size: 0.72rem;
+}
+
+.entry-row-actions .entry-remove-button {
+  background: var(--red-soft);
+  color: var(--red);
 }
 
 .edit-entry-form {
@@ -1337,7 +1354,6 @@ body.modal-open {
   .investment-stats,
   .report-bucket-header,
   .report-subcategory-row,
-  .entry-row,
   .plan-controls,
   .plan-row,
   .edit-actions {
@@ -1345,10 +1361,6 @@ body.modal-open {
   }
 
   .money {
-    text-align: left;
-  }
-
-  .entry-row strong {
     text-align: left;
   }
 
@@ -1375,6 +1387,56 @@ body.modal-open {
 }
 
 @media (max-width: 560px) {
+  #entryModal {
+    align-items: end;
+    padding: 0;
+  }
+
+  #entryModal .entry-modal {
+    width: 100%;
+    max-height: 92dvh;
+    gap: 12px;
+    padding: 18px 16px max(18px, env(safe-area-inset-bottom));
+    border-radius: 8px 8px 0 0;
+  }
+
+  #entryModal .modal-heading h2 {
+    font-size: 1.35rem;
+    overflow-wrap: anywhere;
+  }
+
+  #entryModal .modal-summary {
+    padding: 12px;
+  }
+
+  #entryModal .modal-add-button {
+    width: 100%;
+  }
+
+  .entry-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 12px;
+    padding: 13px;
+  }
+
+  .entry-row-amount {
+    align-self: start;
+    text-align: right;
+  }
+
+  .entry-row-actions {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+
+  .entry-row-actions button {
+    min-height: 40px;
+  }
+
   .forecast-kpis {
     grid-template-columns: 1fr;
   }
