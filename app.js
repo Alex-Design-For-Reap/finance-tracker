@@ -1533,6 +1533,7 @@ function getAccountAdjustments() {
 function getLinkedAccountAdjustment(entry) {
   if (getEntryType(entry) === "reserve") return -Number(entry.amount || 0);
   if (entry.category === INVESTMENT_SECTION) return Number(entry.amount || 0);
+  if (isMoneyInEntry(entry)) return Number(entry.amount || 0);
   return 0;
 }
 
