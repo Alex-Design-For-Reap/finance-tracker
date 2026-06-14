@@ -745,11 +745,12 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
   entryModalContext = context;
   els.entryList.replaceChildren();
   els.entryModalSummary.replaceChildren();
-  els.entryModalSummary.textContent = entry ? "Edit entry" : "Add entry";
+  els.entryModalSummary.textContent = context.formLabel || (entry ? "Edit entry" : "Add entry");
 
   const form = document.createElement("form");
   form.className = "edit-entry-form";
   const defaults = context.getDefaults();
+  const canDelete = Boolean(entry) && context.allowDelete !== false;
   form.innerHTML = `
     <label>
       Date
@@ -757,7 +758,7 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
     </label>
     <label>
       Amount
-      <input name="amount" type="text" inputmode="decimal" value="${entry?.amount ?? ""}" required />
+      <input name="amount" type="text" inputmode="decimal" value="${entry?.amount ?? defaults.amount ?? ""}" required />
     </label>
     <label>
       Description / merchant
@@ -780,9 +781,9 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
       <select name="accountId"></select>
     </label>
     <div class="edit-actions ${entry ? "edit-entry-actions" : ""}">
-      <button type="submit">Save changes</button>
+      <button type="submit">${escapeHtml(context.submitLabel || (entry ? "Save changes" : "Add entry"))}</button>
       <button class="secondary-button" type="button" data-cancel-edit>Cancel</button>
-      ${entry ? '<button class="entry-delete-action" type="button" data-delete-entry>Remove entry</button>' : ""}
+      ${canDelete ? '<button class="entry-delete-action" type="button" data-delete-entry>Remove entry</button>' : ""}
     </div>
   `;
 
@@ -799,6 +800,10 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
     populateSubcategorySelect(subcategorySelect, categorySelect.value);
   });
   form.querySelector("[data-cancel-edit]").addEventListener("click", () => {
+    if (context.onCancel) {
+      context.onCancel();
+      return;
+    }
     renderEntryList(context);
   });
   form.querySelector("[data-delete-entry]")?.addEventListener("click", () => {
@@ -810,10 +815,11 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
     const amount = parseAmount(form.elements.amount.value);
     if (!Number.isFinite(amount) || amount <= 0) return;
 
+    let savedEntry;
     if (entry) {
       entries = entries.map((item) =>
         item.id === entry.id
-          ? {
+          ? (savedEntry = {
               ...item,
               date: form.elements.date.value,
               amount,
@@ -823,11 +829,11 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
               subcategory: subcategorySelect.value,
               accountId: accountSelect.value,
               updatedAt: new Date().toISOString(),
-            }
+            })
           : item,
       );
     } else {
-      entries.push({
+      savedEntry = {
         id: crypto.randomUUID(),
         amount,
         description: normalizeEntryDescription(form.elements.description.value),
@@ -836,10 +842,13 @@ function renderEditEntry(entry, context = entryModalContext || createPeriodEntry
         category: categorySelect.value,
         subcategory: subcategorySelect.value,
         accountId: accountSelect.value,
+        source: defaults.source || undefined,
         createdAt: new Date().toISOString(),
-      });
+      };
+      entries.push(savedEntry);
     }
     saveEntries();
+    context.onSave?.(savedEntry);
     syncPeriodToDateValue(form.elements.date.value);
   });
 
@@ -1415,17 +1424,22 @@ function renderOccurrenceGroups(container, occurrences, emptyText, options = {})
       row.className = `occurrence-row is-${item.flow} ${options.overdue ? "is-overdue" : ""} ${options.completed ? "is-completed" : ""}`;
       row.innerHTML = `
         <span class="occurrence-marker" aria-hidden="true"></span>
-        <span class="occurrence-copy">
+        <button class="occurrence-copy occurrence-edit-button" type="button" title="Edit recurring or planned item">
           <b>${escapeHtml(item.name)}</b>
           <small>${RECURRING_FLOWS[item.flow]} · ${item.category} · ${item.subcategory} · ${RECURRENCE_FREQUENCIES[item.frequency]?.label || item.frequency}</small>
-        </span>
+        </button>
         <strong class="occurrence-amount">${money(item.amount)}</strong>
         <button class="occurrence-status-button ${options.completed ? "secondary-button" : ""}" type="button">
           ${options.completed ? "Undo" : item.flow === "expense" ? "Mark paid" : "Mark done"}
         </button>
       `;
+      row.querySelector(".occurrence-edit-button").addEventListener("click", () => openOccurrenceDefinition(item));
       row.querySelector(".occurrence-status-button").addEventListener("click", () => {
-        setOccurrenceDone(item, !options.completed);
+        if (options.completed) {
+          setOccurrenceDone(item, false);
+          return;
+        }
+        openOccurrenceEntry(item);
       });
       group.append(row);
     });
@@ -1611,6 +1625,50 @@ function setOccurrenceDone(item, completed) {
     : [...recurringOccurrenceStatuses, status];
   saveRecurringOccurrenceStatuses();
   renderUpcoming();
+}
+
+function getOccurrenceEntrySource(item) {
+  return `forecast-occurrence:${getOccurrenceStatusId(item)}`;
+}
+
+function openOccurrenceEntry(item) {
+  const source = getOccurrenceEntrySource(item);
+  const existingEntry = entries.find((entry) => entry.source === source) || null;
+  const actionLabel = item.flow === "expense" ? "paid bill" : item.flow === "income" ? "received income" : "completed investment";
+  const context = {
+    title: item.name,
+    formLabel: existingEntry ? `Review ${actionLabel} entry` : `Confirm ${actionLabel}`,
+    submitLabel: existingEntry ? "Save and mark done" : "Add entry and mark done",
+    allowDelete: false,
+    getEntries: () => entries.filter((entry) => entry.source === source),
+    getSummary: () => "",
+    getDefaults: () => ({
+      date: item.date,
+      amount: item.amount,
+      description: item.name,
+      type: "expense",
+      category: item.category,
+      subcategory: item.subcategory,
+      accountId: "",
+      source,
+    }),
+    onCancel: closeEntryModal,
+    onSave: () => {
+      setOccurrenceDone(item, true);
+      closeEntryModal();
+    },
+  };
+
+  els.entryModalTitle.textContent = item.name;
+  renderEditEntry(existingEntry, context);
+  els.entryModal.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+  els.closeEntriesButton.focus();
+}
+
+function openOccurrenceDefinition(item) {
+  const recurringItem = recurringItems.find((current) => current.id === item.id);
+  if (recurringItem) openRecurringModal(recurringItem);
 }
 
 function expandRecurringItem(item, start, end) {
